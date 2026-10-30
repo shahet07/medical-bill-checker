@@ -8,3 +8,4 @@ fixtures/
 deploy/.env
 .pgdata/
 .env.dev
+.DS_Store
