@@ -85,6 +85,7 @@ class CreateCase(_Body):
     bill_upload_id: str
     eob_upload_ids: List[str] = Field(default_factory=list, max_length=MAX_EOBS)
     eob_upload_id: Optional[str] = None  # single-EOB shorthand
+    language: Literal["en", "es"] = "en"  # language of the explanations
 
 
 class ConfirmTotals(_Body):
@@ -179,6 +180,10 @@ class FlagFeedback(_Body):
 class Survey(_Body):
     helpful: int = Field(ge=1, le=5)
     most_useful: Literal["explanation", "letter", "both", "neither"]
+
+
+class LanguageChange(_Body):
+    language: Literal["en", "es"]
 
 
 class LetterRequest(_Body):
@@ -317,7 +322,7 @@ def create_app(settings: Settings) -> FastAPI:
             eob = store.get_upload(sess, eob_id) if len(eob_id) == 32 else None
             if eob is None or eob.kind != "eob":
                 raise _error(404, "not_found", "EOB upload not found. It may have expired.")
-        case = store.add_case(sess, body.bill_upload_id, eob_ids)
+        case = store.add_case(sess, body.bill_upload_id, eob_ids, body.language)
         runner.submit(case.case_id)
         case = store.get_case(sess, case.case_id)
         return {"case_id": case.case_id, "status": case.status}
@@ -325,7 +330,13 @@ def create_app(settings: Settings) -> FastAPI:
     @app.get("/api/cases/{case_id}")
     def get_case(case_id: str, sess: str = Depends(session)):
         case = own_case(case_id, sess)
-        out = {"case_id": case.case_id, "status": case.status, "error_code": case.error_code, "expires_at": case.expires_at}
+        out = {
+            "case_id": case.case_id,
+            "status": case.status,
+            "error_code": case.error_code,
+            "expires_at": case.expires_at,
+            "language": case.language,
+        }
         result = store.get_result(case.case_id) if case.status in ("ready", "needs_confirmation", "failed") else None
         if result:
             out.update(
@@ -365,6 +376,21 @@ def create_app(settings: Settings) -> FastAPI:
         store.put_result(case.case_id, dict(result, flags=[], explanations=None))
         store.set_status(case.case_id, "queued")
         runner.submit(case.case_id)
+        return {"case_id": case.case_id, "status": store.get_case(sess, case.case_id).status}
+
+    @app.put("/api/cases/{case_id}/language")
+    def change_language(case_id: str, body: LanguageChange, sess: str = Depends(session)):
+        """Rewrite the explanations in another language. Checks and flags do not change."""
+        limiter.check(sess, "confirm")
+        case = own_case(case_id, sess)
+        if case.status != "ready":
+            raise _error(409, "wrong_status", "This is available once the bill has been checked.")
+        if case.language != body.language:
+            result = store.get_result(case.case_id)
+            store.set_language(case.case_id, body.language)
+            store.put_result(case.case_id, dict(result, confirmed=True))
+            store.set_status(case.case_id, "queued")
+            runner.submit(case.case_id)
         return {"case_id": case.case_id, "status": store.get_case(sess, case.case_id).status}
 
     @app.post("/api/cases/{case_id}/letter")

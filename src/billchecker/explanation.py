@@ -56,8 +56,43 @@ BLOCKED_PHRASES = (
     "diagnose",
     "diagnosed",
 )
-# Whole words only, so "sue" does not match "issue".
-_BLOCKED_RE = re.compile(r"\b(?:" + "|".join(re.escape(p) for p in BLOCKED_PHRASES) + r")\b")
+# The same rules for Spanish explanations.
+BLOCKED_PHRASES_ES = (
+    "no pague",
+    "no pagues",
+    "no debe pagar",
+    "no le corresponde pagar",
+    "no es responsable",
+    "cobro excesivo",
+    "le cobraron de más",
+    "es un error",
+    "definitivamente",
+    "fraude",
+    "ilegal",
+    "demanda",
+    "demandar",
+    "abogado",
+    "abogada",
+    "médicamente necesario",
+    "médicamente necesaria",
+    "innecesario",
+    "innecesaria",
+    "diagnóstico",
+    "diagnosticar",
+)
+
+
+def _phrase_re(phrases) -> "re.Pattern":
+    # Whole words only, so "sue" does not match "issue".
+    return re.compile(r"\b(?:" + "|".join(re.escape(p) for p in phrases) + r")\b")
+
+
+_BLOCKED_RE = {"en": _phrase_re(BLOCKED_PHRASES), "es": _phrase_re(BLOCKED_PHRASES + BLOCKED_PHRASES_ES)}
+LANGUAGES = ("en", "es")
+LANGUAGE_RULE = {
+    "en": "",
+    "es": "\n- Write every explanation in Spanish (neutral Latin American Spanish), at about an 8th-grade reading level.",
+}
 
 SYSTEM_PROMPT = """You explain US medical bills to patients in plain, friendly language at about an 8th-grade reading level.
 
@@ -69,6 +104,10 @@ Rules:
 - Do not include any numbers: no dollar amounts, codes, dates, or quantities. The amounts are shown to the patient next to your text.
 - Do not give medical, legal, or financial advice. Do not say whether a service was needed, whether a charge is wrong, or whether the patient should pay.
 - Return an explanation for every line_id and flag_id you are given, and no others."""
+
+
+def system_prompt(language: str) -> str:
+    return SYSTEM_PROMPT + LANGUAGE_RULE[language]
 
 INSTRUCTION = "Explain each line item and flag below for the patient.\n\n<data>\n{data}\n</data>"
 
@@ -123,18 +162,37 @@ class Explanations:
 # --- Templates --------------------------------------------------------------------
 
 
-def line_template(line: LineItem) -> str:
+# Spanish fallbacks. Flag summaries are English templates with amounts, so the
+# Spanish fallback describes the check in general terms; the evidence shown
+# next to it carries the specific amounts.
+FLAG_TEMPLATES_ES = {
+    "duplicate_line": "El mismo servicio aparece más de una vez con la misma fecha y el mismo cargo. Vale la pena preguntar si se cobró dos veces.",
+    "balance_mismatch": "La cantidad que le pide la factura no coincide con lo que su seguro dice que usted debe. Vale la pena preguntar por la diferencia.",
+    "billed_after_denial": "Le cobran un servicio que su seguro negó o no procesó. Vale la pena preguntar si usted es responsable de este cargo.",
+    "network_mismatch": "La factura dice que el proveedor está fuera de la red, pero su seguro procesó el servicio como dentro de la red. Vale la pena confirmarlo.",
+    "no_itemization": "La factura solo muestra un total, sin la lista de servicios. Puede pedir una factura detallada.",
+    "not_on_eob": "Este servicio aparece en su factura, pero no en el estado de cuenta de su seguro para esa fecha. Es posible que no se haya enviado a su seguro.",
+    "charge_mismatch": "El cargo en su factura es diferente de la cantidad que el proveedor le facturó a su seguro por este servicio.",
+    "payment_not_applied": "Su seguro dice que pagó, pero la factura no muestra todo ese pago. Es posible que el pago aún no se haya aplicado.",
+}
+
+
+def line_template(line: LineItem, language: str = "en") -> str:
+    if language == "es":
+        return 'Aparece en su factura como "{}".'.format(line.description)
     return 'Listed on your bill as "{}".'.format(line.description)
 
 
-def flag_template(flag: Flag) -> str:
+def flag_template(flag: Flag, language: str = "en") -> str:
+    if language == "es":
+        return FLAG_TEMPLATES_ES[flag.rule]
     return flag.summary
 
 
-def _all_templates(bill: Bill, flags: List[Flag], problems: List[str]) -> Explanations:
+def _all_templates(bill: Bill, flags: List[Flag], problems: List[str], language: str = "en") -> Explanations:
     return Explanations(
-        lines={li.line_id: Explanation(line_template(li), "template") for li in bill.line_items},
-        flags={f.flag_id: Explanation(flag_template(f), "template") for f in flags},
+        lines={li.line_id: Explanation(line_template(li, language), "template") for li in bill.line_items},
+        flags={f.flag_id: Explanation(flag_template(f, language), "template") for f in flags},
         problems=problems,
     )
 
@@ -162,7 +220,7 @@ def _numbers_in(values: Iterable[Any]) -> Set[Decimal]:
     return out
 
 
-def check(text: str, allowed_numbers: Set[Decimal], max_chars: int) -> Optional[str]:
+def check(text: str, allowed_numbers: Set[Decimal], max_chars: int, language: str = "en") -> Optional[str]:
     """Return a reason code if the text fails a guardrail, else None."""
     t = text.strip()
     if not t:
@@ -171,7 +229,7 @@ def check(text: str, allowed_numbers: Set[Decimal], max_chars: int) -> Optional[
         return "too_long"
     if not _numbers(t) <= allowed_numbers:
         return "unsupported_number"
-    if _BLOCKED_RE.search(t.lower().replace("\u2019", "'")):
+    if _BLOCKED_RE[language].search(t.lower().replace("\u2019", "'")):
         return "blocked_phrase"
     return None
 
@@ -195,7 +253,9 @@ def _flag_input(f: Flag) -> Dict[str, Any]:
     return {"flag_id": f.flag_id, "rule": f.rule, "confidence": f.confidence, "summary": f.summary}
 
 
-def explain(bill: Bill, flags: List[Flag], llm: JsonLLM) -> Explanations:
+def explain(bill: Bill, flags: List[Flag], llm: JsonLLM, language: str = "en") -> Explanations:
+    if language not in LANGUAGES:
+        raise ValueError("unsupported language {!r}".format(language))
     line_inputs = {li.line_id: _line_input(li) for li in bill.line_items}
     flag_inputs = {f.flag_id: _flag_input(f) for f in flags}
     if not line_inputs and not flag_inputs:
@@ -204,15 +264,15 @@ def explain(bill: Bill, flags: List[Flag], llm: JsonLLM) -> Explanations:
     data = json.dumps({"lines": list(line_inputs.values()), "flags": list(flag_inputs.values())}, indent=1)
     content = [{"type": "text", "text": INSTRUCTION.format(data=data.replace("</data", "< /data"))}]
     try:
-        resp = llm.generate(SYSTEM_PROMPT, content, SCHEMA)
+        resp = llm.generate(system_prompt(language), content, SCHEMA)
     except LLMUnavailable:
-        return _all_templates(bill, flags, ["llm_unavailable"])
+        return _all_templates(bill, flags, ["llm_unavailable"], language)
     if resp.stop_reason != "end_turn" or not resp.text:
-        return _all_templates(bill, flags, ["llm_" + resp.stop_reason])
+        return _all_templates(bill, flags, ["llm_" + resp.stop_reason], language)
     try:
         out = _Output.model_validate_json(resp.text)
     except ValidationError:
-        return _all_templates(bill, flags, ["invalid_output"])
+        return _all_templates(bill, flags, ["invalid_output"], language)
 
     got_lines: Dict[str, str] = {}
     for item in out.lines:
@@ -225,21 +285,21 @@ def explain(bill: Bill, flags: List[Flag], llm: JsonLLM) -> Explanations:
     lines: Dict[str, Explanation] = {}
     for li in bill.line_items:
         reason = "missing" if li.line_id not in got_lines else check(
-            got_lines[li.line_id], _numbers_in(line_inputs[li.line_id].values()), MAX_LINE_CHARS
+            got_lines[li.line_id], _numbers_in(line_inputs[li.line_id].values()), MAX_LINE_CHARS, language
         )
         if reason:
             problems.append("{}: {}".format(li.line_id, reason))
-            lines[li.line_id] = Explanation(line_template(li), "template")
+            lines[li.line_id] = Explanation(line_template(li, language), "template")
         else:
             lines[li.line_id] = Explanation(got_lines[li.line_id].strip(), "llm")
 
     expl_flags: Dict[str, Explanation] = {}
     for f in flags:
         allowed = _numbers_in(flag_inputs[f.flag_id].values()) | _numbers_in(e.text for e in f.evidence)
-        reason = "missing" if f.flag_id not in got_flags else check(got_flags[f.flag_id], allowed, MAX_FLAG_CHARS)
+        reason = "missing" if f.flag_id not in got_flags else check(got_flags[f.flag_id], allowed, MAX_FLAG_CHARS, language)
         if reason:
             problems.append("{}: {}".format(f.flag_id, reason))
-            expl_flags[f.flag_id] = Explanation(flag_template(f), "template")
+            expl_flags[f.flag_id] = Explanation(flag_template(f, language), "template")
         else:
             expl_flags[f.flag_id] = Explanation(got_flags[f.flag_id].strip(), "llm")
 

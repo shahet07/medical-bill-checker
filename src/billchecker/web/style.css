@@ -50,6 +50,7 @@ body {
 
 .site-header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 24px 0 20px; margin-bottom: 24px; }
 .site-header h1 { margin: 0 0 6px; font-size: 1.6rem; }
+.header-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .tagline { margin: 0; color: var(--muted); }
 
 h2 { font-size: 1.2rem; margin: 0 0 12px; }

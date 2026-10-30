@@ -510,3 +510,30 @@ def test_guess_code_type(code, kind):
     from billchecker.api import guess_code_type
 
     assert guess_code_type(code) == kind
+
+
+def test_case_language_reaches_explanations(client, llm):
+    case = BY_NAME["clean"]
+    llm.queues["bill"].append(expected_bill(case.bill))
+    llm.queues["explain"].append(LLMResponse(text=None, stop_reason="refusal"))
+    bill_id = upload(client, "bill", render_bill(case.bill)).json()["upload_id"]
+    case_id = client.post("/api/cases", json={"bill_upload_id": bill_id, "language": "es"}).json()["case_id"]
+    got = client.get("/api/cases/" + case_id).json()
+    assert got["language"] == "es"
+    assert got["explanations"]["lines"]["L1"]["text"].startswith("Aparece en su factura")
+    assert client.post("/api/cases", json={"bill_upload_id": bill_id, "language": "fr"}).status_code == 422
+
+
+def test_switching_language_rewrites_explanations_only(client, llm):
+    case_id = start_case(client, llm, "denial")
+    before = client.get("/api/cases/" + case_id).json()
+    llm.queues["explain"].append(LLMResponse(text=None, stop_reason="refusal"))  # forces Spanish templates
+    r = client.put("/api/cases/{}/language".format(case_id), json={"language": "es"})
+    assert r.status_code == 200
+    after = client.get("/api/cases/" + case_id).json()
+    assert after["language"] == "es" and after["status"] == "ready"
+    assert after["flags"] == before["flags"] and after["bill"] == before["bill"]
+    assert after["explanations"]["lines"]["L1"]["text"].startswith("Aparece en su factura")
+    # Same language again: nothing to redo.
+    assert client.put("/api/cases/{}/language".format(case_id), json={"language": "es"}).json()["status"] == "ready"
+    assert client.put("/api/cases/{}/language".format(case_id), json={"language": "de"}).status_code == 422

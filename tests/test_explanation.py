@@ -179,3 +179,48 @@ def test_problems_never_contain_document_text_or_amounts():
     result = explain(bill, flags, FakeLLM(output(lines)))
     for p in result.problems:
         assert "$" not in p and "999" not in p and "blood" not in p.lower()
+
+
+# --- Spanish ------------------------------------------------------------------------------
+
+from typing import get_args  # noqa: E402
+
+from billchecker.explanation import FLAG_TEMPLATES_ES  # noqa: E402
+from billchecker.models import RuleName  # noqa: E402
+
+
+def test_spanish_prompt_and_templates():
+    bill, flags = load("denial")
+    llm = FakeLLM(LLMResponse(text=None, stop_reason="refusal"))
+    result = explain(bill, flags, llm, language="es")
+    assert "in Spanish" in llm.calls[0]["system"]
+    assert result.lines["L2"].text == 'Aparece en su factura como "Complete blood count".'
+    assert all(v.text in FLAG_TEMPLATES_ES.values() for v in result.flags.values())
+
+
+def test_every_rule_has_a_spanish_template():
+    assert set(FLAG_TEMPLATES_ES) == set(get_args(RuleName))
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["No pague este cargo.", "Esto parece un fraude.", "Hable con un abogado.", "No era médicamente necesario."],
+)
+def test_spanish_advice_is_blocked(text):
+    bill, _ = load("clean")
+    result = explain(bill, [], FakeLLM(output(dict(GOOD_LINES, L1=text))), language="es")
+    assert result.lines["L1"].source == "template"
+    assert result.lines["L1"].text.startswith("Aparece en su factura")
+
+
+def test_good_spanish_passes():
+    bill, _ = load("clean")
+    lines = {"L1": "Una consulta con un médico que ya lo conoce.", "L2": "Un análisis de sangre común.", "L3": "La extracción de sangre de una vena."}
+    result = explain(bill, [], FakeLLM(output(lines)), language="es")
+    assert all(v.source == "llm" for v in result.lines.values())
+
+
+def test_unknown_language_rejected():
+    bill, _ = load("clean")
+    with pytest.raises(ValueError):
+        explain(bill, [], FakeLLM(), language="fr")

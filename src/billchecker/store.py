@@ -27,7 +27,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 TTL = timedelta(hours=24)
 ORPHAN_GRACE = timedelta(minutes=10)
 NONCE_BYTES = 12
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 PACK_MAGIC = b"BCF1"
 
 SCHEMA = """
@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS cases (
     session_hash TEXT NOT NULL,
     bill_upload_id TEXT NOT NULL,
     eob_upload_ids TEXT NOT NULL,  -- JSON list of upload IDs
+    language TEXT NOT NULL DEFAULT 'en',
     status TEXT NOT NULL,
     error_code TEXT,
     attempts INTEGER NOT NULL DEFAULT 0,
@@ -128,6 +129,7 @@ class CaseRow:
     case_id: str
     bill_upload_id: str
     eob_upload_ids: List[str]
+    language: str
     status: str
     error_code: Optional[str]
     attempts: int
@@ -213,19 +215,19 @@ class Store:
 
     # --- cases ------------------------------------------------------------------------
 
-    def add_case(self, session_hash: str, bill_upload_id: str, eob_upload_ids: List[str]) -> CaseRow:
+    def add_case(self, session_hash: str, bill_upload_id: str, eob_upload_ids: List[str], language: str = "en") -> CaseRow:
         case_id = new_id()
         now = self._now()
         expires = _iso(now + self.ttl)
         with self._lock, self._db:
             self._db.execute(
-                "INSERT INTO cases VALUES (?, ?, ?, ?, 'queued', NULL, 0, ?, ?)",
-                (case_id, session_hash, bill_upload_id, json.dumps(eob_upload_ids), _iso(now), expires),
+                "INSERT INTO cases VALUES (?, ?, ?, ?, ?, 'queued', NULL, 0, ?, ?)",
+                (case_id, session_hash, bill_upload_id, json.dumps(eob_upload_ids), language, _iso(now), expires),
             )
             # The uploads now live as long as the case that uses them.
             for upload_id in [bill_upload_id] + list(eob_upload_ids):
                 self._db.execute("UPDATE uploads SET expires_at = ? WHERE upload_id = ?", (expires, upload_id))
-        return CaseRow(case_id, bill_upload_id, list(eob_upload_ids), "queued", None, 0, expires)
+        return CaseRow(case_id, bill_upload_id, list(eob_upload_ids), language, "queued", None, 0, expires)
 
     def get_case(self, session_hash: Optional[str], case_id: str) -> Optional[CaseRow]:
         """session_hash=None is for the worker, which already owns the case."""
@@ -241,6 +243,7 @@ class Store:
             row["case_id"],
             row["bill_upload_id"],
             json.loads(row["eob_upload_ids"]),
+            row["language"],
             row["status"],
             row["error_code"],
             row["attempts"],
@@ -253,6 +256,10 @@ class Store:
                 "UPDATE cases SET status = ?, error_code = ?, attempts = attempts + ? WHERE case_id = ?",
                 (status, error_code, 1 if bump_attempts else 0, case_id),
             )
+
+    def set_language(self, case_id: str, language: str) -> None:
+        with self._lock, self._db:
+            self._db.execute("UPDATE cases SET language = ? WHERE case_id = ?", (language, case_id))
 
     def put_result(self, case_id: str, result: Dict[str, Any]) -> None:
         self.put_blob(case_id, json.dumps(result).encode())

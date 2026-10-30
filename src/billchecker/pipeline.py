@@ -82,7 +82,7 @@ class CaseRunner:
             # User confirmed totals; extraction is done, only finish the analysis.
             bill = Bill.model_validate(previous["bill"])
             eob = Eob.model_validate(previous["eob"]) if previous.get("eob") else None
-            return self._finish(case.case_id, bill, eob, previous)
+            return self._finish(case, bill, eob, previous)
 
         bill_res = extract_bill(ingest_many(self._files(case.bill_upload_id)), self.llm)
         if bill_res.data is None:
@@ -111,11 +111,12 @@ class CaseRunner:
         if bill_res.status == "needs_confirmation":
             self.store.put_result(case.case_id, result)
             return self._set(case.case_id, "needs_confirmation")
-        self._finish(case.case_id, bill_res.data, eob, result)
+        self._finish(case, bill_res.data, eob, result)
 
-    def _finish(self, case_id: str, bill: Bill, eob: Optional[Eob], result: Dict[str, Any]) -> None:
+    def _finish(self, case: CaseRow, bill: Bill, eob: Optional[Eob], result: Dict[str, Any]) -> None:
+        case_id = case.case_id
         flags = run_rules(bill, eob, eob_complete=result.get("eob_status") != "partial")
-        expl = explain(bill, flags, self.llm)
+        expl = explain(bill, flags, self.llm, language=case.language)
         for p in expl.problems:
             log.info("case %s explanation fallback %s", case_id, p)
         result = dict(

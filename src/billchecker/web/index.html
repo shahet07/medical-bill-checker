@@ -6,13 +6,17 @@
   <title>Medical Bill Checker</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/i18n.js" defer></script>
   <script src="/static/app.js" defer></script>
 </head>
 <body>
   <header class="site-header">
     <div class="wrap">
-      <h1>Medical Bill Checker</h1>
-      <p class="tagline">Understand your medical bill, compare it with your insurance statement, and get a letter to send if something needs checking.</p>
+      <div class="header-row">
+        <h1 data-i18n="app_title">Medical Bill Checker</h1>
+        <button id="lang-toggle" type="button" class="small" lang="es">Español</button>
+      </div>
+      <p class="tagline" data-i18n="tagline">Understand your medical bill, compare it with your insurance statement, and get a letter to send if something needs checking.</p>
     </div>
   </header>
 
@@ -21,105 +25,105 @@
 
     <!-- Upload -->
     <section id="upload-view" class="card" hidden>
-      <h2>Upload your bill</h2>
+      <h2 data-i18n="upload_title">Upload your bill</h2>
       <form id="upload-form" novalidate>
         <div class="field">
-          <label for="bill-file">Medical bill <span class="req">(required)</span></label>
+          <label for="bill-file"><span data-i18n="bill_label">Medical bill</span> <span class="req" data-i18n="required">(required)</span></label>
           <input id="bill-file" name="bill" type="file" accept="application/pdf,image/jpeg,image/png,image/heic,image/heif,.heic,.heif" multiple required>
-          <p class="hint">PDF or photos (JPG, PNG, iPhone HEIC). If your bill has several pages, select a photo of each page together. Up to 20 MB and 20 pages. A clear, flat photo works best.</p>
+          <p class="hint" data-i18n="bill_hint">PDF or photos (JPG, PNG, iPhone HEIC). If your bill has several pages, select a photo of each page together. Up to 20 MB and 20 pages. A clear, flat photo works best.</p>
         </div>
         <div class="field">
-          <label for="eob-file">Explanation of Benefits (EOB) from your insurer <span class="opt">(optional)</span></label>
+          <label for="eob-file"><span data-i18n="eob_label">Explanation of Benefits (EOB) from your insurer</span> <span class="opt" data-i18n="optional">(optional)</span></label>
           <div id="eob-inputs">
             <input id="eob-file" class="eob-file" name="eob" type="file" accept="application/pdf,image/jpeg,image/png,image/heic,image/heif,.heic,.heif" multiple>
           </div>
-          <button id="add-eob" type="button" class="link">+ Add another EOB</button>
-          <p class="hint">Adding the EOB lets us compare what your insurer says you owe with what the bill asks for. If the bill covers more than one claim, add each claim's EOB.</p>
+          <button id="add-eob" type="button" class="link" data-i18n="add_eob">+ Add another EOB</button>
+          <p class="hint" data-i18n="eob_hint">Adding the EOB lets us compare what your insurer says you owe with what the bill asks for. If the bill covers more than one claim, add each claim's EOB.</p>
         </div>
-        <button id="upload-button" type="submit" class="primary">Check my bill</button>
+        <button id="upload-button" type="submit" class="primary" data-i18n="check_button">Check my bill</button>
       </form>
-      <p class="privacy">Your files are encrypted and deleted automatically after 24 hours. You can delete them sooner at any time.</p>
+      <p class="privacy" data-i18n="privacy">Your files are encrypted and deleted automatically after 24 hours. You can delete them sooner at any time.</p>
     </section>
 
     <!-- Working -->
     <section id="status-view" class="card" hidden>
-      <h2>Checking your bill</h2>
+      <h2 data-i18n="checking_title">Checking your bill</h2>
       <div class="status-row">
         <span class="spinner" aria-hidden="true"></span>
-        <p id="status-text" aria-live="polite">Starting…</p>
+        <p id="status-text" aria-live="polite"></p>
       </div>
-      <button id="cancel-button" type="button" class="link">Cancel and delete</button>
+      <button id="cancel-button" type="button" class="link" data-i18n="cancel_delete">Cancel and delete</button>
     </section>
 
     <!-- Needs confirmation -->
     <section id="confirm-view" class="card" hidden>
-      <h2>Please confirm two amounts</h2>
-      <p>We read your bill, but some numbers did not add up. Please check them against your paper bill so the comparison is accurate.</p>
+      <h2 data-i18n="confirm_title">Please confirm two amounts</h2>
+      <p data-i18n="confirm_intro">We read your bill, but some numbers did not add up. Please check them against your paper bill so the comparison is accurate.</p>
       <ul id="confirm-problems" class="problems"></ul>
       <form id="confirm-form" novalidate>
         <div class="field">
-          <label for="confirm-billed">Total charges</label>
-          <input id="confirm-billed" type="text" inputmode="decimal" placeholder="e.g. 1250.00" autocomplete="off">
+          <label for="confirm-billed" data-i18n="total_charges">Total charges</label>
+          <input id="confirm-billed" type="text" inputmode="decimal" placeholder="e.g. 1250.00" data-i18n-placeholder="eg_1250" autocomplete="off">
         </div>
         <div class="field">
-          <label for="confirm-balance">Amount due (what the bill asks you to pay now)</label>
-          <input id="confirm-balance" type="text" inputmode="decimal" placeholder="e.g. 350.00" autocomplete="off">
+          <label for="confirm-balance" data-i18n="amount_due_long">Amount due (what the bill asks you to pay now)</label>
+          <input id="confirm-balance" type="text" inputmode="decimal" placeholder="e.g. 350.00" data-i18n-placeholder="eg_350" autocomplete="off">
         </div>
-        <p class="hint">Leave a box empty if the bill does not show that amount.</p>
-        <button type="submit" class="primary">Confirm and continue</button>
+        <p class="hint" data-i18n="leave_empty">Leave a box empty if the bill does not show that amount.</p>
+        <button type="submit" class="primary" data-i18n="confirm_button">Confirm and continue</button>
       </form>
     </section>
 
     <!-- Failed -->
     <section id="failed-view" class="card" hidden>
-      <h2>We could not finish checking this bill</h2>
+      <h2 data-i18n="failed_title">We could not finish checking this bill</h2>
       <p id="failed-text"></p>
-      <button id="failed-restart" type="button" class="primary">Try again</button>
+      <button id="failed-restart" type="button" class="primary" data-i18n="try_again">Try again</button>
     </section>
 
     <!-- Results -->
     <section id="results-view" hidden>
       <div class="card">
-        <h2>Summary</h2>
+        <h2 data-i18n="summary_title">Summary</h2>
         <dl id="summary" class="summary"></dl>
         <p id="eob-note" class="note" hidden></p>
-        <p id="warning-note" class="note" hidden>Some lines were hard to read. Please compare them with your paper bill.</p>
-        <p id="edited-note" class="note" hidden>You corrected this bill. Checks were run on your corrected version.</p>
+        <p id="warning-note" class="note" hidden data-i18n="warning_note">Some lines were hard to read. Please compare them with your paper bill.</p>
+        <p id="edited-note" class="note" hidden data-i18n="edited_note">You corrected this bill. Checks were run on your corrected version.</p>
         <details class="glossary">
-          <summary>What do these terms mean?</summary>
+          <summary data-i18n="glossary_title">What do these terms mean?</summary>
           <dl id="glossary"></dl>
         </details>
       </div>
 
       <div class="card">
-        <h2 id="flags-heading">Things worth checking</h2>
-        <p id="flags-intro" class="muted">These are things to ask the billing office about. They are not confirmed errors.</p>
+        <h2 id="flags-heading" data-i18n="flags_title">Things worth checking</h2>
+        <p id="flags-intro" class="muted" data-i18n="flags_intro">These are things to ask the billing office about. They are not confirmed errors.</p>
         <div id="flags"></div>
       </div>
 
       <div class="card">
         <div class="card-head">
-          <h2>What's on your bill</h2>
-          <button id="edit-lines" type="button" class="small">Fix a mistake</button>
+          <h2 data-i18n="lines_title">What's on your bill</h2>
+          <button id="edit-lines" type="button" class="small" data-i18n="fix_mistake">Fix a mistake</button>
         </div>
         <form id="edit-form" hidden novalidate>
-          <p class="hint">Correct anything we read wrong, then save. We will check the bill again.</p>
+          <p class="hint" data-i18n="edit_hint">Correct anything we read wrong, then save. We will check the bill again.</p>
           <div id="edit-rows"></div>
-          <button id="add-line" type="button" class="small">+ Add a line</button>
+          <button id="add-line" type="button" class="small" data-i18n="add_line">+ Add a line</button>
           <div class="field-row three">
-            <div class="field"><label for="edit-billed">Total charges</label><input id="edit-billed" type="text" inputmode="decimal"></div>
-            <div class="field"><label for="edit-adjust">Payments and adjustments</label><input id="edit-adjust" type="text" inputmode="decimal"></div>
-            <div class="field"><label for="edit-balance">Amount due</label><input id="edit-balance" type="text" inputmode="decimal"></div>
+            <div class="field"><label for="edit-billed" data-i18n="total_charges">Total charges</label><input id="edit-billed" type="text" inputmode="decimal"></div>
+            <div class="field"><label for="edit-adjust" data-i18n="payments_adjustments">Payments and adjustments</label><input id="edit-adjust" type="text" inputmode="decimal"></div>
+            <div class="field"><label for="edit-balance" data-i18n="amount_due">Amount due</label><input id="edit-balance" type="text" inputmode="decimal"></div>
           </div>
           <div class="actions">
-            <button type="submit" class="primary">Save and check again</button>
-            <button id="edit-cancel" type="button">Cancel</button>
+            <button type="submit" class="primary" data-i18n="save_check">Save and check again</button>
+            <button id="edit-cancel" type="button" data-i18n="cancel">Cancel</button>
           </div>
         </form>
         <div class="table-wrap" id="lines-wrap">
           <table id="lines">
             <thead>
-              <tr><th scope="col" class="date">Date</th><th scope="col">Service</th><th scope="col" class="num">Charge</th></tr>
+              <tr><th scope="col" class="date" data-i18n="col_date">Date</th><th scope="col" data-i18n="col_service">Service</th><th scope="col" class="num" data-i18n="col_charge">Charge</th></tr>
             </thead>
             <tbody></tbody>
           </table>
@@ -127,102 +131,102 @@
       </div>
 
       <div class="card">
-        <h2>Get a letter</h2>
-        <p class="muted">We fill in a letter you can mail or email to the billing office. Your details below are used only to write the letter. We do not save them.</p>
+        <h2 data-i18n="letter_title">Get a letter</h2>
+        <p class="muted" data-i18n="letter_intro">We fill in a letter you can mail or email to the billing office. Your details below are used only to write the letter. We do not save them.</p>
         <form id="letter-form" novalidate>
           <fieldset class="field">
-            <legend>Letter type</legend>
-            <label class="choice"><input type="radio" name="kind" value="dispute" id="kind-dispute"> Ask them to review the items above</label>
-            <label class="choice"><input type="radio" name="kind" value="itemized_request" id="kind-itemized"> Ask for an itemized bill</label>
-            <label class="choice"><input type="radio" name="kind" value="financial_assistance" id="kind-assistance"> Ask about financial assistance (charity care)</label>
-            <label class="choice"><input type="radio" name="kind" value="payment_plan" id="kind-plan"> Ask for a payment plan</label>
-            <label class="choice" id="appeal-choice"><input type="radio" name="kind" value="insurer_appeal" id="kind-appeal"> Ask my insurer to review a denied service</label>
+            <legend data-i18n="letter_type">Letter type</legend>
+            <label class="choice"><input type="radio" name="kind" value="dispute" id="kind-dispute"> <span data-i18n="kind_dispute">Ask them to review the items above</span></label>
+            <label class="choice"><input type="radio" name="kind" value="itemized_request" id="kind-itemized"> <span data-i18n="kind_itemized">Ask for an itemized bill</span></label>
+            <label class="choice"><input type="radio" name="kind" value="financial_assistance" id="kind-assistance"> <span data-i18n="kind_assistance">Ask about financial assistance (charity care)</span></label>
+            <label class="choice"><input type="radio" name="kind" value="payment_plan" id="kind-plan"> <span data-i18n="kind_plan">Ask for a payment plan</span></label>
+            <label class="choice" id="appeal-choice"><input type="radio" name="kind" value="insurer_appeal" id="kind-appeal"> <span data-i18n="kind_appeal">Ask my insurer to review a denied service</span></label>
           </fieldset>
-          <p id="dispute-hint" class="hint">The letter includes the items you left ticked above.</p>
-          <p id="assistance-hint" class="hint" hidden>Many hospitals, especially nonprofit ones, offer free or reduced-cost care based on income. It is worth asking even if you have insurance.</p>
+          <p id="dispute-hint" class="hint" data-i18n="dispute_hint">The letter includes the items you left ticked above.</p>
+          <p id="assistance-hint" class="hint" hidden data-i18n="assistance_hint">Many hospitals, especially nonprofit ones, offer free or reduced-cost care based on income. It is worth asking even if you have insurance.</p>
           <div class="field" id="plan-field" hidden>
-            <label for="p-monthly">Monthly amount you can pay <span class="opt">(optional)</span></label>
-            <input id="p-monthly" type="text" inputmode="decimal" placeholder="e.g. 50.00" autocomplete="off">
+            <label for="p-monthly"><span data-i18n="monthly_label">Monthly amount you can pay</span> <span class="opt" data-i18n="optional">(optional)</span></label>
+            <input id="p-monthly" type="text" inputmode="decimal" placeholder="e.g. 50.00" data-i18n-placeholder="eg_50" autocomplete="off">
           </div>
           <div class="field" id="member-field" hidden>
-            <label for="p-member">Insurance member ID <span class="opt">(optional)</span></label>
+            <label for="p-member"><span data-i18n="member_label">Insurance member ID</span> <span class="opt" data-i18n="optional">(optional)</span></label>
             <input id="p-member" type="text" maxlength="50" autocomplete="off">
-            <p class="hint">Printed on your insurance card. This letter goes to your insurer, not the billing office.</p>
+            <p class="hint" data-i18n="member_hint">Printed on your insurance card. This letter goes to your insurer, not the billing office.</p>
           </div>
           <div class="field">
-            <label for="p-name">Your name</label>
+            <label for="p-name" data-i18n="your_name">Your name</label>
             <input id="p-name" type="text" autocomplete="name" maxlength="200" required>
           </div>
           <div class="field">
-            <label for="p-address">Your mailing address <span class="opt">(optional)</span></label>
-            <textarea id="p-address" rows="3" autocomplete="street-address" placeholder="Street&#10;City, State ZIP"></textarea>
+            <label for="p-address"><span data-i18n="address_label">Your mailing address</span> <span class="opt" data-i18n="optional">(optional)</span></label>
+            <textarea id="p-address" rows="3" autocomplete="street-address" placeholder="Street&#10;City, State ZIP" data-i18n-placeholder="address_placeholder"></textarea>
           </div>
           <div class="field-row">
             <div class="field">
-              <label for="p-phone">Phone <span class="opt">(optional)</span></label>
+              <label for="p-phone"><span data-i18n="phone_label">Phone</span> <span class="opt" data-i18n="optional">(optional)</span></label>
               <input id="p-phone" type="tel" autocomplete="tel" maxlength="50">
             </div>
             <div class="field">
-              <label for="p-email">Email <span class="opt">(optional)</span></label>
+              <label for="p-email"><span data-i18n="email_label">Email</span> <span class="opt" data-i18n="optional">(optional)</span></label>
               <input id="p-email" type="email" autocomplete="email" maxlength="200">
             </div>
           </div>
           <div class="field">
-            <label for="p-account">Full account number from your bill <span class="opt">(optional)</span></label>
+            <label for="p-account"><span data-i18n="account_label">Full account number from your bill</span> <span class="opt" data-i18n="optional">(optional)</span></label>
             <input id="p-account" type="text" maxlength="50" autocomplete="off">
-            <p class="hint">We only keep the last 4 digits. Type the full number here so the billing office can find your account.</p>
+            <p class="hint" data-i18n="account_hint">We only keep the last 4 digits. Type the full number here so the billing office can find your account.</p>
           </div>
           <div class="field">
-            <label for="p-note">Anything you'd like to add <span class="opt">(optional)</span></label>
+            <label for="p-note"><span data-i18n="note_label">Anything you'd like to add</span> <span class="opt" data-i18n="optional">(optional)</span></label>
             <textarea id="p-note" rows="3" maxlength="1000"></textarea>
           </div>
-          <button type="submit" class="primary">Create letter</button>
+          <button type="submit" class="primary" data-i18n="create_letter">Create letter</button>
         </form>
         <div id="letter-output" hidden>
           <pre id="letter-text" class="letter" tabindex="0"></pre>
           <div class="actions">
-            <button id="download-pdf" type="button" class="primary">Download PDF</button>
-            <button id="copy-letter" type="button">Copy text</button>
-            <button id="download-letter" type="button">Download text</button>
+            <button id="download-pdf" type="button" class="primary" data-i18n="download_pdf">Download PDF</button>
+            <button id="copy-letter" type="button" data-i18n="copy_text">Copy text</button>
+            <button id="download-letter" type="button" data-i18n="download_text">Download text</button>
           </div>
         </div>
       </div>
 
       <div class="card" id="survey-card">
-        <h2>Help us improve</h2>
+        <h2 data-i18n="survey_title">Help us improve</h2>
         <form id="survey-form" novalidate>
           <fieldset class="field">
-            <legend>How helpful was this?</legend>
+            <legend data-i18n="survey_helpful">How helpful was this?</legend>
             <div class="scale">
-              <label class="choice"><input type="radio" name="helpful" value="1"> 1 Not helpful</label>
+              <label class="choice"><input type="radio" name="helpful" value="1"> <span data-i18n="helpful_1">1 Not helpful</span></label>
               <label class="choice"><input type="radio" name="helpful" value="2"> 2</label>
               <label class="choice"><input type="radio" name="helpful" value="3"> 3</label>
               <label class="choice"><input type="radio" name="helpful" value="4"> 4</label>
-              <label class="choice"><input type="radio" name="helpful" value="5"> 5 Very helpful</label>
+              <label class="choice"><input type="radio" name="helpful" value="5"> <span data-i18n="helpful_5">5 Very helpful</span></label>
             </div>
           </fieldset>
           <fieldset class="field">
-            <legend>What helped most?</legend>
-            <label class="choice"><input type="radio" name="most_useful" value="explanation"> Understanding my bill</label>
-            <label class="choice"><input type="radio" name="most_useful" value="letter"> The letter</label>
-            <label class="choice"><input type="radio" name="most_useful" value="both"> Both</label>
-            <label class="choice"><input type="radio" name="most_useful" value="neither"> Neither</label>
+            <legend data-i18n="survey_most">What helped most?</legend>
+            <label class="choice"><input type="radio" name="most_useful" value="explanation"> <span data-i18n="useful_explanation">Understanding my bill</span></label>
+            <label class="choice"><input type="radio" name="most_useful" value="letter"> <span data-i18n="useful_letter">The letter</span></label>
+            <label class="choice"><input type="radio" name="most_useful" value="both"> <span data-i18n="useful_both">Both</span></label>
+            <label class="choice"><input type="radio" name="most_useful" value="neither"> <span data-i18n="useful_neither">Neither</span></label>
           </fieldset>
-          <button type="submit">Send</button>
-          <p id="survey-thanks" class="thanks" hidden>Thank you!</p>
+          <button type="submit" data-i18n="send">Send</button>
+          <p id="survey-thanks" class="thanks" hidden data-i18n="thank_you">Thank you!</p>
         </form>
-        <p class="hint">Answers are anonymous and contain nothing from your bill.</p>
+        <p class="hint" data-i18n="survey_anon">Answers are anonymous and contain nothing from your bill.</p>
       </div>
 
       <div class="card actions-card">
-        <button id="new-bill" type="button">Check another bill</button>
-        <button id="delete-case" type="button" class="danger">Delete my data now</button>
+        <button id="new-bill" type="button" data-i18n="new_bill">Check another bill</button>
+        <button id="delete-case" type="button" class="danger" data-i18n="delete_now">Delete my data now</button>
       </div>
     </section>
   </main>
 
   <footer class="wrap site-footer">
-    <p>This tool helps you understand and organize your medical bills. It is not legal, medical, or financial advice. Flags are things to ask about, not proof of an error.</p>
+    <p data-i18n="footer">This tool helps you understand and organize your medical bills. It is not legal, medical, or financial advice. Flags are things to ask about, not proof of an error.</p>
   </footer>
 </body>
 </html>
