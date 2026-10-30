@@ -415,3 +415,11 @@ def test_feedback_validation(client, llm):
     assert client.post(survey, json={"helpful": 6, "most_useful": "letter"}).status_code == 422
     other = TestClient(client.app)
     assert other.post(url, json={"flag_id": flag_id, "verdict": "correct"}).status_code == 404
+
+
+def test_letter_as_pdf(client, llm):
+    case_id = start_case(client, llm, "denial")
+    r = client.post("/api/cases/{}/letter".format(case_id), json={"kind": "dispute", "patient": PATIENT, "format": "pdf"})
+    assert r.status_code == 200 and r.headers["content-type"] == "application/pdf"
+    assert 'filename="dispute.pdf"' in r.headers["content-disposition"]
+    assert r.content.startswith(b"%PDF-")

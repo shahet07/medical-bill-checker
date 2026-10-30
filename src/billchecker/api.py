@@ -30,6 +30,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .ingest import MAX_BYTES, MAX_FILES, IngestError, ingest_many, sniff_type
 from .letters import MAX_NOTE_CHARS, Patient, dispute, itemized_request
+from .letters_pdf import render_pdf
 from .llm import JsonLLM, make_llm
 from .models import Bill, Eob, Flag, Money
 from .pipeline import CaseRunner
@@ -104,6 +105,7 @@ class LetterRequest(_Body):
     patient: PatientIn
     flag_ids: Optional[List[str]] = None  # dispute only; default all flags
     note: Optional[str] = Field(default=None, max_length=MAX_NOTE_CHARS)
+    format: Literal["json", "pdf"] = "json"
 
 
 # --- Helpers ----------------------------------------------------------------------------
@@ -292,6 +294,13 @@ def create_app(settings: Settings) -> FastAPI:
                 out = dispute(bill, eob, flags, patient, today, body.note)
         except ValueError:
             raise _error(422, "invalid_letter", "The letter could not be created from these details.")
+        if body.format == "pdf":
+            filename = out.kind.replace("_", "-") + ".pdf"
+            return Response(
+                render_pdf(out),
+                media_type="application/pdf",
+                headers={"Content-Disposition": 'attachment; filename="{}"'.format(filename)},
+            )
         return {"kind": out.kind, "subject": out.subject, "text": out.text}
 
     def ready_result(case_id: str, sess: str):

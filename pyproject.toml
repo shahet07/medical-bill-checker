@@ -12,6 +12,8 @@ dependencies = [
     "pypdfium2>=4",
     "pillow>=10",
     "pillow-heif>=0.18",
+    # Letter PDFs. 4.3+ needs Python 3.10+.
+    "reportlab>=4,<4.3",
     "fastapi>=0.115",
     "uvicorn>=0.30",
     "python-multipart>=0.0.9",
@@ -21,8 +23,6 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
-    # Renders the synthetic test documents. 4.3+ needs Python 3.10+.
-    "reportlab>=4,<4.3",
     # scripts/ui_check.py drives the installed Google Chrome; no browser download needed.
     "playwright>=1.45",
 ]

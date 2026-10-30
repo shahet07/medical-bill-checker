@@ -29,6 +29,7 @@ let caseId = null;
 let caseData = null;
 let pollTimer = null;
 let lastLetter = null;
+let lastLetterRequest = null;
 
 // --- Small helpers -------------------------------------------------------------------
 
@@ -413,6 +414,7 @@ async function onLetter(event) {
   try {
     const letter = await api("POST", "/api/cases/" + caseId + "/letter", body);
     lastLetter = letter;
+    lastLetterRequest = body;
     $("#letter-text").textContent = letter.text;
     $("#letter-output").hidden = false;
     $("#letter-text").focus();
@@ -432,14 +434,42 @@ async function onCopy() {
   }
 }
 
-function onDownload() {
-  if (!lastLetter) return;
-  const url = URL.createObjectURL(new Blob([lastLetter.text], { type: "text/plain;charset=utf-8" }));
-  const a = el("a", { href: url, download: lastLetter.kind === "dispute" ? "billing-review-letter.txt" : "itemized-bill-request.txt" });
+function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = el("a", { href: url, download: filename });
   document.body.append(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function letterFilename(ext) {
+  return (lastLetter ? lastLetter.kind.replace(/_/g, "-") : "letter") + "." + ext;
+}
+
+function onDownload() {
+  if (!lastLetter) return;
+  saveBlob(new Blob([lastLetter.text], { type: "text/plain;charset=utf-8" }), letterFilename("txt"));
+}
+
+async function onDownloadPdf() {
+  if (!lastLetterRequest) return;
+  const button = $("#download-pdf");
+  button.disabled = true;
+  try {
+    const resp = await fetch("/api/cases/" + caseId + "/letter", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(Object.assign({}, lastLetterRequest, { format: "pdf" })),
+    });
+    if (!resp.ok) throw new Error("The PDF could not be created. Please try again.");
+    saveBlob(await resp.blob(), letterFilename("pdf"));
+  } catch (e) {
+    showError(e.message);
+  } finally {
+    button.disabled = false;
+  }
 }
 
 // --- Reset and delete ----------------------------------------------------------------
@@ -449,6 +479,7 @@ function reset(message) {
   remember(null);
   caseData = null;
   lastLetter = null;
+  lastLetterRequest = null;
   $("#upload-form").reset();
   [...document.querySelectorAll(".eob-file")].slice(1).forEach((i) => i.remove());
   $("#add-eob").hidden = false;
@@ -488,6 +519,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#letter-form").addEventListener("submit", onLetter);
   $("#copy-letter").addEventListener("click", onCopy);
   $("#download-letter").addEventListener("click", onDownload);
+  $("#download-pdf").addEventListener("click", onDownloadPdf);
   $("#delete-case").addEventListener("click", deleteCase);
   $("#cancel-button").addEventListener("click", deleteCase);
   $("#failed-restart").addEventListener("click", discardAndReset);

@@ -203,3 +203,25 @@ def test_patient_name_required():
     bill, _, _ = load("summary")
     with pytest.raises(ValueError):
         itemized_request(bill, Patient("  ", []), TODAY)
+
+
+# --- PDF --------------------------------------------------------------------------------
+
+
+def test_pdf_letter_matches_text_and_escapes_markup():
+    import io
+
+    import pdfplumber
+
+    from billchecker.letters_pdf import render_pdf
+
+    bill, eob, flags = load("denial")
+    odd = bill.line_items[1].model_copy(update={"description": "Blood <b>count</b> & <font size=40>panel"})
+    bill = bill.model_copy(update={"line_items": [bill.line_items[0], odd, bill.line_items[2]]})
+    letter = dispute(bill, eob, flags, PATIENT, TODAY)
+    pdf = render_pdf(letter)
+    assert pdf.startswith(b"%PDF-")
+    text = "".join(p.extract_text() for p in pdfplumber.open(io.BytesIO(pdf)).pages)
+    assert "Blood <b>count</b> & <font size=40>panel" in text
+    for needle in ("Sam Example", "difference of $55.00", "Sincerely,"):
+        assert needle in text
