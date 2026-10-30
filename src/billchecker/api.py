@@ -19,7 +19,9 @@ import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+import re
 from datetime import date, datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from typing import Callable, Deque, Dict, List, Literal, Optional, Tuple
 
@@ -97,6 +99,76 @@ class PatientIn(_Body):
     email: Optional[str] = Field(default=None, max_length=200)
     account_number: Optional[str] = Field(default=None, max_length=50)
     member_id: Optional[str] = Field(default=None, max_length=50)
+
+
+class LineEdit(_Body):
+    line_id: Optional[str] = None  # the original line this edits; None for a new line
+    service_date: Optional[date] = None
+    description: str = Field(min_length=1, max_length=300)
+    code: Optional[str] = Field(default=None, max_length=20)
+    units: Optional[Decimal] = Field(default=None, ge=0, le=10000)
+    charge: Money
+
+
+class TotalsEdit(_Body):
+    billed: Optional[Money] = None
+    adjustments: Optional[Money] = None
+    patient_balance: Optional[Money] = None
+
+
+class BillEdit(_Body):
+    line_items: List[LineEdit] = Field(max_length=200)
+    totals: TotalsEdit
+
+
+def guess_code_type(code: Optional[str]) -> Optional[str]:
+    if not code:
+        return None
+    c = code.strip().upper()
+    if re.match(r"^\d{5}([-\s]?[A-Z0-9]{2})*$", c):
+        return "CPT"
+    if re.match(r"^[A-Z]\d{4}([-\s]?[A-Z0-9]{2})*$", c):
+        return "HCPCS"
+    if re.match(r"^\d{3,4}$", c):
+        return "REV"
+    return "OTHER"
+
+
+def apply_edit(bill: Bill, edit: BillEdit) -> Bill:
+    """Rebuild the bill from the user's corrected lines and totals.
+
+    Unchanged lines keep their source text from the document. Changed or new
+    lines get source text that says the user entered them, so evidence never
+    presents the user's correction as something printed on the bill.
+    """
+    originals = {li.line_id: li for li in bill.line_items}
+    items = []
+    for n, e in enumerate(edit.line_items, 1):
+        code = e.code.strip() if e.code and e.code.strip() else None
+        orig = originals.get(e.line_id) if e.line_id else None
+        fields = dict(service_date=e.service_date, description=e.description.strip(), code=code, units=e.units, charge=e.charge)
+        unchanged = orig is not None and all(getattr(orig, k) == v for k, v in fields.items())
+        if unchanged:
+            items.append(orig.model_copy(update={"line_id": "L{}".format(n)}))
+            continue
+        text = "Entered by you: {} {} {}".format(
+            e.service_date.isoformat() if e.service_date else "", code or "", e.description.strip()
+        )
+        items.append(
+            dict(
+                fields,
+                line_id="L{}".format(n),
+                code_type=orig.code_type if orig is not None and orig.code == code else guess_code_type(code),
+                source_page=orig.source_page if orig is not None else 1,
+                source_text=" ".join(text.split()) + " " + str(e.charge),
+            )
+        )
+    data = bill.model_dump(mode="json")
+    data["line_items"] = [i.model_dump(mode="json") if hasattr(i, "model_dump") else i for i in items]
+    data["totals"] = dict(data["totals"], **edit.totals.model_dump(mode="json"))
+    data["itemized"] = bool(items) or bill.itemized
+    data["extraction_confidence"] = bill.extraction_confidence
+    return Bill.model_validate(data)
 
 
 class FlagFeedback(_Body):
@@ -259,6 +331,7 @@ def create_app(settings: Settings) -> FastAPI:
             out.update(
                 {k: result[k] for k in ("bill", "eob", "eob_status", "flags", "explanations", "problems", "warnings")}
             )
+            out["user_edited"] = bool(result.get("user_edited"))
             out["error_message"] = result.get("error_message")
         return out
 
@@ -273,6 +346,23 @@ def create_app(settings: Settings) -> FastAPI:
         totals = bill.totals.model_copy(update={"billed": body.billed, "patient_balance": body.patient_balance})
         bill = bill.model_copy(update={"totals": totals})
         store.put_result(case.case_id, dict(result, bill=bill.model_dump(mode="json"), confirmed=True, problems=[]))
+        store.set_status(case.case_id, "queued")
+        runner.submit(case.case_id)
+        return {"case_id": case.case_id, "status": store.get_case(sess, case.case_id).status}
+
+    @app.put("/api/cases/{case_id}/bill")
+    def edit_bill(case_id: str, body: BillEdit, sess: str = Depends(session)):
+        limiter.check(sess, "confirm")
+        case = own_case(case_id, sess)
+        if case.status not in ("ready", "needs_confirmation"):
+            raise _error(409, "wrong_status", "The bill can be edited once it has been read.")
+        result = store.get_result(case.case_id)
+        try:
+            bill = apply_edit(Bill.model_validate(result["bill"]), body)
+        except ValueError:
+            raise _error(422, "invalid_edit", "Some of the corrected values are not valid.")
+        result = dict(result, bill=bill.model_dump(mode="json"), confirmed=True, user_edited=True, problems=[])
+        store.put_result(case.case_id, dict(result, flags=[], explanations=None))
         store.set_status(case.case_id, "queued")
         runner.submit(case.case_id)
         return {"case_id": case.case_id, "status": store.get_case(sess, case.case_id).status}

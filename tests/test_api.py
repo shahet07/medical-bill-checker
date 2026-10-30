@@ -447,3 +447,66 @@ def test_appeal_without_denial_rejected(client, llm):
     case_id = start_case(client, llm, "clean")
     r = client.post("/api/cases/{}/letter".format(case_id), json={"kind": "insurer_appeal", "patient": PATIENT})
     assert r.status_code == 422 and r.json()["detail"]["error"] == "no_denials"
+
+
+# --- Editing the bill ----------------------------------------------------------------------
+
+
+def lines_as_edit(bill):
+    return [
+        {k: li[k] for k in ("line_id", "service_date", "description", "code", "units", "charge")}
+        for li in bill["line_items"]
+    ]
+
+
+def test_edit_fixes_a_misread_line_and_reruns_checks(client, llm):
+    case_id = start_case(client, llm, "duplicate")
+    got = client.get("/api/cases/" + case_id).json()
+    assert [f["rule"] for f in got["flags"]] == ["duplicate_line"]
+    lines = lines_as_edit(got["bill"])
+    del lines[2]  # the second blood count was a misread
+    body = {"line_items": lines, "totals": {"billed": "205.00", "adjustments": "-165.00", "patient_balance": "40.00"}}
+    r = client.put("/api/cases/{}/bill".format(case_id), json=body)
+    assert r.status_code == 200
+    got = client.get("/api/cases/" + case_id).json()
+    assert got["status"] == "ready" and got["flags"] == [] and got["user_edited"] is True
+    assert [li["line_id"] for li in got["bill"]["line_items"]] == ["L1", "L2", "L3"]
+    # Unchanged lines keep the document's own text.
+    assert got["bill"]["line_items"][0]["source_text"].startswith("03/04/2026 99213")
+
+
+def test_edited_and_added_lines_are_marked_as_entered_by_user(client, llm):
+    case_id = start_case(client, llm, "clean")
+    got = client.get("/api/cases/" + case_id).json()
+    lines = lines_as_edit(got["bill"])
+    lines[1]["charge"] = "45.00"
+    lines.append({"service_date": "2026-03-04", "description": "Chest X-ray", "code": "71046", "units": "1", "charge": "120.00"})
+    body = {"line_items": lines, "totals": {"billed": "330.00", "adjustments": "-165.00", "patient_balance": "160.00"}}
+    client.put("/api/cases/{}/bill".format(case_id), json=body)
+    got = client.get("/api/cases/" + case_id).json()
+    items = got["bill"]["line_items"]
+    assert items[1]["source_text"].startswith("Entered by you:") and items[1]["charge"] == "45.00"
+    assert items[3]["source_text"].startswith("Entered by you:") and items[3]["code_type"] == "CPT"
+    rules = sorted(f["rule"] for f in got["flags"])
+    assert rules == ["balance_mismatch", "charge_mismatch", "not_on_eob"]
+    evidence = [e["text"] for f in got["flags"] for e in f["evidence"] if e["ref"] == "L4"]
+    assert evidence and all(t.startswith("Entered by you:") for t in evidence)
+
+
+def test_edit_validation(client, llm):
+    case_id = start_case(client, llm, "clean")
+    url = "/api/cases/{}/bill".format(case_id)
+    bad_charge = {"line_items": [{"description": "x", "charge": "1.234"}], "totals": {}}
+    assert client.put(url, json=bad_charge).status_code == 422
+    empty_desc = {"line_items": [{"description": "", "charge": "1.00"}], "totals": {}}
+    assert client.put(url, json=empty_desc).status_code == 422
+    assert TestClient(client.app).put(url, json={"line_items": [], "totals": {}}).status_code == 404
+
+
+@pytest.mark.parametrize(
+    "code, kind", [("99213", "CPT"), ("99213-25", "CPT"), ("J1100", "HCPCS"), ("0450", "REV"), ("ABC", "OTHER"), (None, None)]
+)
+def test_guess_code_type(code, kind):
+    from billchecker.api import guess_code_type
+
+    assert guess_code_type(code) == kind

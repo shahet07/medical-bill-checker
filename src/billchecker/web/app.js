@@ -20,6 +20,21 @@ const RULE_TITLES = {
   charge_mismatch: "Charge differs from what your insurer was billed",
   payment_not_applied: "Insurance payment may not be applied",
 };
+// Plain-language definitions written for this tool.
+const GLOSSARY = [
+  ["EOB (Explanation of Benefits)", "A statement from your insurer showing what the provider charged, what your plan paid, and what you may owe. It is not a bill."],
+  ["Itemized bill", "A bill that lists each service separately, with its date, code, and charge."],
+  ["Allowed amount", "The most your plan will pay for a covered service, as agreed with in-network providers. Charges above this are usually written off."],
+  ["Adjustment", "An amount taken off the bill, often the discount your insurer negotiated with the provider."],
+  ["Deductible", "What you pay each year for covered care before your plan starts to pay."],
+  ["Copay", "A fixed amount you pay for a service, such as $30 for a visit."],
+  ["Coinsurance", "Your share of the cost as a percentage, such as 20% of the allowed amount, after your deductible."],
+  ["In network / out of network", "In-network providers have a contract with your insurer and usually cost you less. Out-of-network providers do not."],
+  ["Denied claim", "A service your insurer decided not to pay for. You can ask your insurer to review the decision."],
+  ["Procedure code (CPT or HCPCS)", "A short code that identifies the service you received. Hospitals may also use revenue codes for departments."],
+  ["Financial assistance (charity care)", "Free or reduced-cost care that many hospitals offer based on income. Nonprofit hospitals are required to have a policy."],
+];
+
 const CONFIDENCE = { high: "Strong signal", medium: "Worth a look", low: "Weak signal" };
 const FAILED_TEXT = {
   unreadable: "We could not read this bill. Please try a clearer, flat photo in good light, or the PDF version.",
@@ -256,7 +271,9 @@ function renderResults(c) {
   eobNote.textContent = c.eob_status === "partial"
     ? "We could not read one of your EOBs, so checks that compare the whole bill with your insurance were skipped. Try uploading a clearer copy."
     : "We could not read your EOB, so the bill was checked on its own. Try uploading a clearer copy to compare them.";
-  $("#warning-note").hidden = !(c.warnings && c.warnings.length) && bill.extraction_confidence !== "low";
+  $("#warning-note").hidden = (!(c.warnings && c.warnings.length) && bill.extraction_confidence !== "low") || c.user_edited;
+  $("#edited-note").hidden = !c.user_edited;
+  closeEditor();
 
   renderFlags(c);
   renderLines(c);
@@ -374,6 +391,79 @@ function renderLines(c) {
       );
     })
   );
+}
+
+// --- Editing ---------------------------------------------------------------------------
+
+function editRow(li) {
+  const row = el("fieldset", { class: "edit-row", "data-line-id": li.line_id || "" });
+  const field = (label, name, value, attrs) =>
+    el("label", { class: "edit-cell edit-" + name }, el("span", {}, label), el("input", Object.assign({ name, value: value || "" }, attrs || {})));
+  const remove = el("button", { type: "button", class: "small danger", "aria-label": "Remove this line" }, "Remove");
+  remove.addEventListener("click", () => row.remove());
+  row.append(
+    field("Date", "service_date", li.service_date, { type: "date" }),
+    field("Code", "code", li.code, { type: "text", maxlength: 20 }),
+    field("Service", "description", li.description, { type: "text", maxlength: 300, required: true }),
+    field("Units", "units", li.units, { type: "text", inputmode: "decimal" }),
+    field("Charge", "charge", li.charge, { type: "text", inputmode: "decimal", required: true }),
+    remove
+  );
+  return row;
+}
+
+function openEditor() {
+  const bill = caseData.bill;
+  $("#edit-rows").replaceChildren(...bill.line_items.map(editRow));
+  $("#edit-billed").value = bill.totals.billed || "";
+  $("#edit-adjust").value = bill.totals.adjustments || "";
+  $("#edit-balance").value = bill.totals.patient_balance || "";
+  $("#edit-form").hidden = false;
+  $("#lines-wrap").hidden = true;
+  $("#edit-lines").hidden = true;
+}
+
+function closeEditor() {
+  $("#edit-form").hidden = true;
+  $("#lines-wrap").hidden = false;
+  $("#edit-lines").hidden = false;
+}
+
+async function onSaveEdit(event) {
+  event.preventDefault();
+  showError("");
+  try {
+    const lines = [...document.querySelectorAll("#edit-rows .edit-row")].map((row, i) => {
+      const v = (name) => row.querySelector('[name="' + name + '"]').value.trim();
+      if (!v("description")) throw new Error("Line " + (i + 1) + " needs a description.");
+      const charge = parseAmount(v("charge"));
+      if (charge === null) throw new Error("Line " + (i + 1) + " needs a charge.");
+      const units = v("units");
+      if (units && !/^\d+(\.\d+)?$/.test(units)) throw new Error("Line " + (i + 1) + ": units should be a number.");
+      return {
+        line_id: row.dataset.lineId || null,
+        service_date: v("service_date") || null,
+        description: v("description"),
+        code: v("code") || null,
+        units: units || null,
+        charge,
+      };
+    });
+    const totals = {
+      billed: parseAmount($("#edit-billed").value),
+      adjustments: parseAmount($("#edit-adjust").value),
+      patient_balance: parseAmount($("#edit-balance").value),
+    };
+    await api("PUT", "/api/cases/" + caseId + "/bill", { line_items: lines, totals });
+    show("status-view");
+    poll();
+  } catch (e) {
+    showError(e.message);
+  }
+}
+
+function renderGlossary() {
+  $("#glossary").replaceChildren(...GLOSSARY.flatMap(([term, def]) => [el("dt", {}, term), el("dd", {}, def)]));
 }
 
 // --- Letter --------------------------------------------------------------------------
@@ -541,6 +631,11 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#upload-form").addEventListener("submit", onUpload);
   $("#add-eob").addEventListener("click", addEobInput);
   $("#survey-form").addEventListener("submit", onSurvey);
+  $("#edit-lines").addEventListener("click", openEditor);
+  $("#edit-cancel").addEventListener("click", closeEditor);
+  $("#add-line").addEventListener("click", () => $("#edit-rows").append(editRow({})));
+  $("#edit-form").addEventListener("submit", onSaveEdit);
+  renderGlossary();
   document.querySelectorAll('input[name="kind"]').forEach((r) => r.addEventListener("change", onKindChange));
   $("#confirm-form").addEventListener("submit", onConfirm);
   $("#letter-form").addEventListener("submit", onLetter);

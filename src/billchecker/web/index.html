@@ -84,6 +84,11 @@
         <dl id="summary" class="summary"></dl>
         <p id="eob-note" class="note" hidden></p>
         <p id="warning-note" class="note" hidden>Some lines were hard to read. Please compare them with your paper bill.</p>
+        <p id="edited-note" class="note" hidden>You corrected this bill. Checks were run on your corrected version.</p>
+        <details class="glossary">
+          <summary>What do these terms mean?</summary>
+          <dl id="glossary"></dl>
+        </details>
       </div>
 
       <div class="card">
@@ -93,8 +98,25 @@
       </div>
 
       <div class="card">
-        <h2>What's on your bill</h2>
-        <div class="table-wrap">
+        <div class="card-head">
+          <h2>What's on your bill</h2>
+          <button id="edit-lines" type="button" class="small">Fix a mistake</button>
+        </div>
+        <form id="edit-form" hidden novalidate>
+          <p class="hint">Correct anything we read wrong, then save. We will check the bill again.</p>
+          <div id="edit-rows"></div>
+          <button id="add-line" type="button" class="small">+ Add a line</button>
+          <div class="field-row three">
+            <div class="field"><label for="edit-billed">Total charges</label><input id="edit-billed" type="text" inputmode="decimal"></div>
+            <div class="field"><label for="edit-adjust">Payments and adjustments</label><input id="edit-adjust" type="text" inputmode="decimal"></div>
+            <div class="field"><label for="edit-balance">Amount due</label><input id="edit-balance" type="text" inputmode="decimal"></div>
+          </div>
+          <div class="actions">
+            <button type="submit" class="primary">Save and check again</button>
+            <button id="edit-cancel" type="button">Cancel</button>
+          </div>
+        </form>
+        <div class="table-wrap" id="lines-wrap">
           <table id="lines">
             <thead>
               <tr><th scope="col" class="date">Date</th><th scope="col">Service</th><th scope="col" class="num">Charge</th></tr>

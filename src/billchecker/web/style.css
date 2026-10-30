@@ -153,6 +153,21 @@ button.small { padding: 4px 10px; font-size: 0.85rem; }
 button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); font-weight: 600; }
 .thanks { color: var(--ok); font-size: 0.9rem; font-weight: 600; }
 .scale { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.edit-row { display: grid; grid-template-columns: 9.5rem 6rem 1fr 4.5rem 7rem auto; gap: 8px; align-items: end; border: 0; border-bottom: 1px solid var(--border); padding: 10px 0; margin: 0; }
+.edit-cell span { display: block; font-size: 0.8rem; color: var(--muted); font-weight: 600; margin-bottom: 2px; }
+.edit-cell input { width: 100%; padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
+@media (max-width: 720px) {
+  .edit-row { grid-template-columns: 1fr 1fr; }
+  .edit-description { grid-column: 1 / -1; }
+}
+.field-row.three { grid-template-columns: 1fr 1fr 1fr; margin-top: 16px; }
+@media (max-width: 560px) { .field-row.three { grid-template-columns: 1fr; } }
+.glossary { margin-top: 16px; }
+.glossary summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+.glossary dl { margin: 10px 0 0; }
+.glossary dt { font-weight: 600; margin-top: 10px; }
+.glossary dd { margin: 2px 0 0; color: var(--muted); }
 .none-found { color: var(--ok); font-weight: 600; }
 
 .table-wrap { overflow-x: auto; }
