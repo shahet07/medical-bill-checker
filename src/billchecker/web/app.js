@@ -375,13 +375,28 @@ function renderLines(c) {
 
 // --- Letter --------------------------------------------------------------------------
 
+function hasDenials(c) {
+  return !!(c.eob && c.eob.service_lines.some((sl) => sl.status === "denied" || sl.status === "not_processed"));
+}
+
 function setupLetterForm(c) {
   const hasFlags = (c.flags || []).length > 0;
   const dispute = $("#kind-dispute");
   dispute.disabled = !hasFlags;
   (hasFlags ? dispute : $("#kind-itemized")).checked = true;
-  $("#dispute-hint").hidden = !hasFlags;
+  $("#appeal-choice").hidden = !hasDenials(c);
   $("#letter-output").hidden = true;
+  onKindChange();
+}
+
+function onKindChange() {
+  const checked = document.querySelector('input[name="kind"]:checked');
+  const kind = checked ? checked.value : "";
+  $("#dispute-hint").hidden = kind !== "dispute";
+  $("#assistance-hint").hidden = kind !== "financial_assistance";
+  $("#plan-field").hidden = kind !== "payment_plan";
+  $("#member-field").hidden = kind !== "insurer_appeal";
+  $("#p-account").closest(".field").hidden = kind === "insurer_appeal";
 }
 
 function selectedFlagIds() {
@@ -404,9 +419,17 @@ async function onLetter(event) {
       phone: $("#p-phone").value.trim() || null,
       email: $("#p-email").value.trim() || null,
       account_number: $("#p-account").value.trim() || null,
+      member_id: $("#p-member").value.trim() || null,
     },
     note: $("#p-note").value.trim() || null,
   };
+  if (kind === "payment_plan") {
+    try {
+      body.monthly_amount = parseAmount($("#p-monthly").value);
+    } catch (e) {
+      return showError(e.message);
+    }
+  }
   if (kind === "dispute") {
     body.flag_ids = selectedFlagIds();
     if (!body.flag_ids.length) return showError("Tick at least one item above to include in the letter.");
@@ -515,6 +538,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#upload-form").addEventListener("submit", onUpload);
   $("#add-eob").addEventListener("click", addEobInput);
   $("#survey-form").addEventListener("submit", onSurvey);
+  document.querySelectorAll('input[name="kind"]').forEach((r) => r.addEventListener("change", onKindChange));
   $("#confirm-form").addEventListener("submit", onConfirm);
   $("#letter-form").addEventListener("submit", onLetter);
   $("#copy-letter").addEventListener("click", onCopy);

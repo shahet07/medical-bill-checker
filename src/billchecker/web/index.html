@@ -112,8 +112,21 @@
             <legend>Letter type</legend>
             <label class="choice"><input type="radio" name="kind" value="dispute" id="kind-dispute"> Ask them to review the items above</label>
             <label class="choice"><input type="radio" name="kind" value="itemized_request" id="kind-itemized"> Ask for an itemized bill</label>
+            <label class="choice"><input type="radio" name="kind" value="financial_assistance" id="kind-assistance"> Ask about financial assistance (charity care)</label>
+            <label class="choice"><input type="radio" name="kind" value="payment_plan" id="kind-plan"> Ask for a payment plan</label>
+            <label class="choice" id="appeal-choice"><input type="radio" name="kind" value="insurer_appeal" id="kind-appeal"> Ask my insurer to review a denied service</label>
           </fieldset>
           <p id="dispute-hint" class="hint">The letter includes the items you left ticked above.</p>
+          <p id="assistance-hint" class="hint" hidden>Many hospitals, especially nonprofit ones, offer free or reduced-cost care based on income. It is worth asking even if you have insurance.</p>
+          <div class="field" id="plan-field" hidden>
+            <label for="p-monthly">Monthly amount you can pay <span class="opt">(optional)</span></label>
+            <input id="p-monthly" type="text" inputmode="decimal" placeholder="e.g. 50.00" autocomplete="off">
+          </div>
+          <div class="field" id="member-field" hidden>
+            <label for="p-member">Insurance member ID <span class="opt">(optional)</span></label>
+            <input id="p-member" type="text" maxlength="50" autocomplete="off">
+            <p class="hint">Printed on your insurance card. This letter goes to your insurer, not the billing office.</p>
+          </div>
           <div class="field">
             <label for="p-name">Your name</label>
             <input id="p-name" type="text" autocomplete="name" maxlength="200" required>

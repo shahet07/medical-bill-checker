@@ -38,11 +38,13 @@ class Patient:
     # Full account number typed by the patient for the letter. We only keep the
     # last 4 characters of the extracted one, which a billing office can't look up.
     account_number: Optional[str] = None
+    # Insurance member ID, for letters to the insurer. Typed by the patient.
+    member_id: Optional[str] = None
 
 
 @dataclass(frozen=True)
 class Letter:
-    kind: str  # "itemized_request" | "dispute"
+    kind: str  # see LETTER_KINDS
     subject: str
     text: str
 
@@ -53,6 +55,10 @@ def long_date(d: date) -> str:
 
 def usd(amount: Decimal) -> str:
     return "{}${:,.2f}".format("-" if amount < 0 else "", abs(amount))
+
+
+LETTER_KINDS = ("itemized_request", "dispute", "financial_assistance", "payment_plan", "insurer_appeal")
+DENIED = ("denied", "not_processed")
 
 
 # --- Public API -------------------------------------------------------------------
@@ -92,6 +98,92 @@ def dispute(
         "Please place the account on hold while this review is in progress.",
     ]
     return _letter("dispute", "Request for review of charges", bill, eob, patient, today, body, note)
+
+
+def financial_assistance(bill: Bill, patient: Patient, today: date, note: Optional[str] = None) -> Letter:
+    body = [
+        "I am writing to ask about financial assistance for the account above. Please send me:",
+        "\n".join(
+            "- " + item
+            for item in (
+                "your financial assistance or charity care policy",
+                "a plain-language summary of the policy",
+                "the application form, and a list of any documents I need to include",
+            )
+        ),
+        "Please also tell me whether any discounts are available for patients paying on their own, "
+        "and place the account on hold while my application is being considered.",
+    ]
+    return _letter("financial_assistance", "Request for financial assistance", bill, None, patient, today, body, note)
+
+
+def payment_plan(
+    bill: Bill, patient: Patient, today: date, monthly_amount: Optional[Decimal] = None, note: Optional[str] = None
+) -> Letter:
+    opening = "I would like to pay the balance on the account above through a monthly payment plan."
+    if bill.totals.patient_balance is not None:
+        opening += " My statement shows an amount due of {}.".format(usd(bill.totals.patient_balance))
+    if monthly_amount is not None:
+        if monthly_amount <= 0:
+            raise ValueError("monthly amount must be positive")
+        offer = "I can pay {} per month. Please let me know if this works.".format(usd(monthly_amount))
+    else:
+        offer = "Please tell me what payment plan options are available."
+    body = [
+        opening + " " + offer,
+        "Please confirm the plan terms in writing, including whether any interest or fees apply, "
+        "and keep the account out of collections while I make payments as agreed.",
+    ]
+    return _letter("payment_plan", "Request for a payment plan", bill, None, patient, today, body, note)
+
+
+def denied_lines(eob: Optional[Eob]) -> List[EobLine]:
+    return [sl for sl in eob.service_lines if sl.status in DENIED] if eob else []
+
+
+def insurer_appeal(bill: Bill, eob: Optional[Eob], patient: Patient, today: date, note: Optional[str] = None) -> Letter:
+    """Ask the insurer (not the provider) to review denied or unprocessed services."""
+    lines = denied_lines(eob)
+    if not lines:
+        raise ValueError("an appeal needs an EOB with a denied or unprocessed service")
+    items = []
+    for sl in lines:
+        what = sl.code or "Service"
+        when = " on " + long_date(sl.service_date) if sl.service_date else ""
+        billed = ", billed at " + usd(sl.billed) if sl.billed is not None else ""
+        status = "denied" if sl.status == "denied" else "not processed"
+        reason = " (reason given: {})".format(sl.denial_reason) if sl.denial_reason else ""
+        items.append("- {}{}{}: {}{}".format(what, when, billed, status, reason))
+    provider = " from " + bill.provider_name if bill.provider_name else ""
+    body = [
+        "I am asking you to review your decision on the following service(s){}:".format(provider),
+        "\n".join(items),
+        "Please reconsider these decisions. If you need more information from me or from my provider, "
+        "please tell me what is needed. Please also send me a copy of the plan rules or criteria used to "
+        "make this decision, and tell me the deadline and next steps if I need to file a formal appeal.",
+    ]
+    recipient = [eob.insurer or "My health plan", "Attn: Claims Review and Appeals"]
+    ref = ["Re: Request for review of a claim decision"]
+    if patient.member_id and patient.member_id.strip():
+        ref.append("Member ID: " + patient.member_id.strip())
+    if eob.claim_id:
+        ref.append("Claim number: " + eob.claim_id)
+    if bill.provider_name:
+        ref.append("Provider: " + bill.provider_name)
+    ref += _service_dates(bill)
+    return _letter(
+        "insurer_appeal",
+        "Request for review of a claim decision",
+        bill,
+        eob,
+        patient,
+        today,
+        body,
+        note,
+        recipient=recipient,
+        ref=ref,
+        greeting="Dear Claims Review Team,",
+    )
 
 
 # --- Flag paragraphs --------------------------------------------------------------
@@ -180,6 +272,9 @@ def _letter(
     today: date,
     body: List[str],
     note: Optional[str],
+    recipient: Optional[List[str]] = None,
+    ref: Optional[List[str]] = None,
+    greeting: str = "Dear Billing Department,",
 ) -> Letter:
     if not patient.name.strip():
         raise ValueError("patient name is required")
@@ -188,22 +283,8 @@ def _letter(
         raise ValueError("note is longer than {} characters".format(MAX_NOTE_CHARS))
 
     sender = [patient.name] + [a for a in patient.address_lines if a.strip()]
-    recipient = [bill.provider_name or "Billing Office", "Attn: Billing Department"]
-
-    ref = ["Re: " + subject]
-    if patient.account_number and patient.account_number.strip():
-        ref.append("Account number: " + patient.account_number.strip())
-    elif bill.account_number_redacted:
-        ref.append("Account number ending in " + bill.account_number_redacted.lstrip("*"))
-    if bill.statement_date:
-        ref.append("Statement date: " + long_date(bill.statement_date))
-    dos = bill.dates_of_service
-    if dos.start and dos.end and dos.start != dos.end:
-        ref.append("Dates of service: {} to {}".format(long_date(dos.start), long_date(dos.end)))
-    elif dos.start or dos.end:
-        ref.append("Date of service: " + long_date(dos.start or dos.end))
-    if eob and eob.claim_id:
-        ref.append("Insurance claim number: " + eob.claim_id)
+    recipient = recipient or [bill.provider_name or "Billing Office", "Attn: Billing Department"]
+    ref = ref or _provider_ref(subject, bill, eob, patient)
 
     contact = [c for c in (patient.phone, patient.email) if c]
     closing = "Thank you for your help."
@@ -215,10 +296,33 @@ def _letter(
         long_date(today),
         "\n".join(recipient),
         "\n".join(ref),
-        "Dear Billing Department,",
+        greeting,
         *body,
     ]
     if note:
         blocks.append(note)
     blocks += [closing, "Sincerely,\n" + patient.name]
     return Letter(kind=kind, subject=subject, text="\n\n".join(blocks) + "\n")
+
+
+def _service_dates(bill: Bill) -> List[str]:
+    dos = bill.dates_of_service
+    if dos.start and dos.end and dos.start != dos.end:
+        return ["Dates of service: {} to {}".format(long_date(dos.start), long_date(dos.end))]
+    if dos.start or dos.end:
+        return ["Date of service: " + long_date(dos.start or dos.end)]
+    return []
+
+
+def _provider_ref(subject: str, bill: Bill, eob: Optional[Eob], patient: Patient) -> List[str]:
+    ref = ["Re: " + subject]
+    if patient.account_number and patient.account_number.strip():
+        ref.append("Account number: " + patient.account_number.strip())
+    elif bill.account_number_redacted:
+        ref.append("Account number ending in " + bill.account_number_redacted.lstrip("*"))
+    if bill.statement_date:
+        ref.append("Statement date: " + long_date(bill.statement_date))
+    ref += _service_dates(bill)
+    if eob and eob.claim_id:
+        ref.append("Insurance claim number: " + eob.claim_id)
+    return ref

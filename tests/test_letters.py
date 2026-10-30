@@ -225,3 +225,59 @@ def test_pdf_letter_matches_text_and_escapes_markup():
     assert "Blood <b>count</b> & <font size=40>panel" in text
     for needle in ("Sam Example", "difference of $55.00", "Sincerely,"):
         assert needle in text
+
+
+# --- More letter types ---------------------------------------------------------------------
+
+from billchecker.letters import financial_assistance, insurer_appeal, payment_plan  # noqa: E402
+
+
+def test_financial_assistance_letter():
+    bill, _, _ = load("summary")
+    t = financial_assistance(bill, PATIENT, TODAY).text
+    assert "Re: Request for financial assistance" in t
+    assert "- your financial assistance or charity care policy" in t
+    assert "Account number ending in 5432" in t
+    assert "on hold while my application" in t
+
+
+def test_payment_plan_with_and_without_amount():
+    bill, _, _ = load("summary")
+    t = payment_plan(bill, PATIENT, TODAY, Decimal("50.00")).text
+    assert "amount due of $350.00" in t and "I can pay $50.00 per month" in t
+    t = payment_plan(bill, PATIENT, TODAY).text
+    assert "what payment plan options are available" in t and "per month" not in t
+    with pytest.raises(ValueError):
+        payment_plan(bill, PATIENT, TODAY, Decimal("0"))
+
+
+def test_insurer_appeal_goes_to_insurer_and_lists_denials():
+    bill, eob, _ = load("denial")
+    patient = Patient("Sam Example", [], member_id="XYZ123456")
+    t = insurer_appeal(bill, eob, patient, TODAY).text
+    assert "Example Health Plan\nAttn: Claims Review and Appeals" in t
+    assert "Dear Claims Review Team," in t and "Dear Billing Department" not in t
+    assert "Member ID: XYZ123456" in t and "Claim number: C-2026-0001" in t
+    assert "Provider: Riverside Medical Group" in t and "Date of service: March 4, 2026" in t
+    assert "- 85025 on March 4, 2026, billed at $40.00: denied (reason given: Not medically necessary (CO-50))" in t
+    assert "99213" not in t  # processed lines are not appealed
+    assert "Account number" not in t  # the provider's account number means nothing to the insurer
+
+
+def test_insurer_appeal_needs_a_denial():
+    bill, eob, _ = load("clean")
+    with pytest.raises(ValueError):
+        insurer_appeal(bill, eob, PATIENT, TODAY)
+    with pytest.raises(ValueError):
+        insurer_appeal(bill, None, PATIENT, TODAY)
+
+
+@pytest.mark.parametrize("name", ["summary", "denial", "duplicate"])
+def test_new_letters_have_no_blanks(name):
+    bill, eob, _ = load(name)
+    letters = [financial_assistance(bill, PATIENT, TODAY), payment_plan(bill, PATIENT, TODAY)]
+    if eob and any(sl.status != "processed" for sl in eob.service_lines):
+        letters.append(insurer_appeal(bill, eob, PATIENT, TODAY))
+    for letter in letters:
+        assert "None" not in letter.text and "\n\n\n" not in letter.text
+        assert letter.text.rstrip().endswith("Sincerely,\nSam Example")

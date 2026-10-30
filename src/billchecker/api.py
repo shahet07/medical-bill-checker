@@ -29,7 +29,15 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
 from .ingest import MAX_BYTES, MAX_FILES, IngestError, ingest_many, sniff_type
-from .letters import MAX_NOTE_CHARS, Patient, dispute, itemized_request
+from .letters import (
+    MAX_NOTE_CHARS,
+    Patient,
+    dispute,
+    financial_assistance,
+    insurer_appeal,
+    itemized_request,
+    payment_plan,
+)
 from .letters_pdf import render_pdf
 from .llm import JsonLLM, make_llm
 from .models import Bill, Eob, Flag, Money
@@ -88,6 +96,7 @@ class PatientIn(_Body):
     phone: Optional[str] = Field(default=None, max_length=50)
     email: Optional[str] = Field(default=None, max_length=200)
     account_number: Optional[str] = Field(default=None, max_length=50)
+    member_id: Optional[str] = Field(default=None, max_length=50)
 
 
 class FlagFeedback(_Body):
@@ -101,8 +110,9 @@ class Survey(_Body):
 
 
 class LetterRequest(_Body):
-    kind: Literal["itemized_request", "dispute"]
+    kind: Literal["itemized_request", "dispute", "financial_assistance", "payment_plan", "insurer_appeal"]
     patient: PatientIn
+    monthly_amount: Optional[Money] = None  # payment_plan only
     flag_ids: Optional[List[str]] = None  # dispute only; default all flags
     note: Optional[str] = Field(default=None, max_length=MAX_NOTE_CHARS)
     format: Literal["json", "pdf"] = "json"
@@ -281,6 +291,14 @@ def create_app(settings: Settings) -> FastAPI:
         try:
             if body.kind == "itemized_request":
                 out = itemized_request(bill, patient, today, body.note)
+            elif body.kind == "financial_assistance":
+                out = financial_assistance(bill, patient, today, body.note)
+            elif body.kind == "payment_plan":
+                out = payment_plan(bill, patient, today, body.monthly_amount, body.note)
+            elif body.kind == "insurer_appeal":
+                if not eob or not any(sl.status in ("denied", "not_processed") for sl in eob.service_lines):
+                    raise _error(422, "no_denials", "An appeal needs an EOB that shows a denied service.")
+                out = insurer_appeal(bill, eob, patient, today, body.note)
             else:
                 flags = [Flag.model_validate(f) for f in result["flags"]]
                 if body.flag_ids is not None:

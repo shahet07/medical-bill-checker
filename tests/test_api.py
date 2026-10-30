@@ -423,3 +423,25 @@ def test_letter_as_pdf(client, llm):
     assert r.status_code == 200 and r.headers["content-type"] == "application/pdf"
     assert 'filename="dispute.pdf"' in r.headers["content-disposition"]
     assert r.content.startswith(b"%PDF-")
+
+
+@pytest.mark.parametrize(
+    "name, kind, extra, expect",
+    [
+        ("summary", "financial_assistance", {}, "Request for financial assistance"),
+        ("summary", "payment_plan", {"monthly_amount": "50.00"}, "I can pay $50.00 per month"),
+        ("denial", "insurer_appeal", {}, "Attn: Claims Review and Appeals"),
+    ],
+)
+def test_new_letter_kinds(client, llm, name, kind, extra, expect):
+    case_id = start_case(client, llm, name)
+    body = dict({"kind": kind, "patient": dict(PATIENT, member_id="M1")}, **extra)
+    r = client.post("/api/cases/{}/letter".format(case_id), json=body)
+    assert r.status_code == 200, r.text
+    assert expect in r.json()["text"]
+
+
+def test_appeal_without_denial_rejected(client, llm):
+    case_id = start_case(client, llm, "clean")
+    r = client.post("/api/cases/{}/letter".format(case_id), json={"kind": "insurer_appeal", "patient": PATIENT})
+    assert r.status_code == 422 and r.json()["detail"]["error"] == "no_denials"
