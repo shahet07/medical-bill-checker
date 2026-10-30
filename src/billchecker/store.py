@@ -51,6 +51,24 @@ CREATE TABLE IF NOT EXISTS cases (
     created_at TEXT NOT NULL,
     expires_at TEXT NOT NULL
 );
+-- Validation feedback. No document content, no session, no case ID: only a
+-- one-way key for de-duplication, so these rows can outlive the 24h expiry.
+CREATE TABLE IF NOT EXISTS flag_feedback (
+    feedback_key TEXT PRIMARY KEY,
+    rule TEXT NOT NULL,
+    confidence TEXT NOT NULL,
+    verdict TEXT NOT NULL,
+    model TEXT,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS survey (
+    survey_key TEXT PRIMARY KEY,
+    helpful INTEGER NOT NULL,
+    most_useful TEXT NOT NULL,
+    flag_count INTEGER NOT NULL,
+    had_eob INTEGER NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """
 
 
@@ -129,6 +147,7 @@ class Store:
         self.blobs.mkdir(parents=True, exist_ok=True)
         os.chmod(self.root, 0o700)
         self._aead = AESGCM(key)
+        self._feedback_salt = hashlib.sha256(b"billchecker-feedback|" + key).digest()
         self._now = now
         self.ttl = ttl
         self._lock = threading.Lock()
@@ -241,6 +260,33 @@ class Store:
     def get_result(self, case_id: str) -> Optional[Dict[str, Any]]:
         data = self.get_blob(case_id)
         return json.loads(data) if data is not None else None
+
+    # --- feedback ---------------------------------------------------------------------
+
+    def _feedback_key(self, *parts: str) -> str:
+        # Keyed hash so the stored key cannot be linked back to a case ID.
+        return hashlib.sha256(self._feedback_salt + "|".join(parts).encode()).hexdigest()
+
+    def record_flag_feedback(self, case_id: str, flag_id: str, rule: str, confidence: str, verdict: str, model: Optional[str]) -> None:
+        with self._lock, self._db:
+            self._db.execute(
+                "INSERT OR REPLACE INTO flag_feedback VALUES (?, ?, ?, ?, ?, ?)",
+                (self._feedback_key("flag", case_id, flag_id), rule, confidence, verdict, model, _iso(self._now())),
+            )
+
+    def record_survey(self, case_id: str, helpful: int, most_useful: str, flag_count: int, had_eob: bool) -> None:
+        with self._lock, self._db:
+            self._db.execute(
+                "INSERT OR REPLACE INTO survey VALUES (?, ?, ?, ?, ?, ?)",
+                (self._feedback_key("survey", case_id), helpful, most_useful, flag_count, int(had_eob), _iso(self._now())),
+            )
+
+    def feedback_rows(self) -> Dict[str, List[Dict[str, Any]]]:
+        with self._lock:
+            return {
+                "flags": [dict(r) for r in self._db.execute("SELECT rule, confidence, verdict, model FROM flag_feedback")],
+                "survey": [dict(r) for r in self._db.execute("SELECT helpful, most_useful, flag_count, had_eob FROM survey")],
+            }
 
     def delete_case(self, session_hash: str, case_id: str) -> bool:
         case = self.get_case(session_hash, case_id)

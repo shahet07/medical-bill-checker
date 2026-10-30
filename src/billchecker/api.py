@@ -47,7 +47,7 @@ SESSION_COOKIE = "bc_session"
 MIME = {"pdf": "application/pdf", "png": "image/png", "jpeg": "image/jpeg", "heic": "image/heic"}
 MAX_EOBS = 5
 # action -> (max requests, window in seconds), per session
-DEFAULT_LIMITS = {"upload": (20, 3600), "case": (10, 3600), "letter": (60, 3600), "confirm": (20, 3600)}
+DEFAULT_LIMITS = {"upload": (20, 3600), "case": (10, 3600), "letter": (60, 3600), "confirm": (20, 3600), "feedback": (100, 3600)}
 
 
 @dataclass
@@ -87,6 +87,16 @@ class PatientIn(_Body):
     phone: Optional[str] = Field(default=None, max_length=50)
     email: Optional[str] = Field(default=None, max_length=200)
     account_number: Optional[str] = Field(default=None, max_length=50)
+
+
+class FlagFeedback(_Body):
+    flag_id: str
+    verdict: Literal["correct", "incorrect", "unsure"]
+
+
+class Survey(_Body):
+    helpful: int = Field(ge=1, le=5)
+    most_useful: Literal["explanation", "letter", "both", "neither"]
 
 
 class LetterRequest(_Body):
@@ -283,6 +293,30 @@ def create_app(settings: Settings) -> FastAPI:
         except ValueError:
             raise _error(422, "invalid_letter", "The letter could not be created from these details.")
         return {"kind": out.kind, "subject": out.subject, "text": out.text}
+
+    def ready_result(case_id: str, sess: str):
+        case = own_case(case_id, sess)
+        if case.status != "ready":
+            raise _error(409, "wrong_status", "This is available once the bill has been checked.")
+        return case, store.get_result(case.case_id)
+
+    @app.post("/api/cases/{case_id}/feedback", status_code=204)
+    def flag_feedback(case_id: str, body: FlagFeedback, sess: str = Depends(session)):
+        limiter.check(sess, "feedback")
+        case, result = ready_result(case_id, sess)
+        flag = next((f for f in result["flags"] if f["flag_id"] == body.flag_id), None)
+        if flag is None:
+            raise _error(404, "not_found", "That item is not part of this case.")
+        model = getattr(settings.llm, "model", None)
+        store.record_flag_feedback(case.case_id, flag["flag_id"], flag["rule"], flag["confidence"], body.verdict, model)
+        return Response(status_code=204)
+
+    @app.post("/api/cases/{case_id}/survey", status_code=204)
+    def survey(case_id: str, body: Survey, sess: str = Depends(session)):
+        limiter.check(sess, "feedback")
+        case, result = ready_result(case_id, sess)
+        store.record_survey(case.case_id, body.helpful, body.most_useful, len(result["flags"]), bool(result.get("eob")))
+        return Response(status_code=204)
 
     @app.delete("/api/cases/{case_id}", status_code=204)
     def delete_case(case_id: str, sess: str = Depends(session)):

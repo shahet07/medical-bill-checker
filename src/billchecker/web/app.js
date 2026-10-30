@@ -298,10 +298,48 @@ function renderFlags(c) {
           { class: "include", for: checkboxId },
           el("input", { type: "checkbox", id: checkboxId, "data-flag-id": f.flag_id, checked: true }),
           "Include in my letter"
-        )
+        ),
+        feedbackRow(f.flag_id)
       );
     })
   );
+}
+
+const VERDICTS = [["correct", "Yes, a real problem"], ["incorrect", "No, it was fine"], ["unsure", "Not sure yet"]];
+
+function feedbackRow(flagId) {
+  const row = el("div", { class: "feedback" }, el("span", { class: "feedback-q" }, "Was this right?"));
+  const status = el("span", { class: "thanks", role: "status" });
+  for (const [verdict, label] of VERDICTS) {
+    const b = el("button", { type: "button", class: "small" }, label);
+    b.addEventListener("click", async () => {
+      try {
+        await api("POST", "/api/cases/" + caseId + "/feedback", { flag_id: flagId, verdict });
+        row.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+        status.textContent = "Thanks";
+      } catch (e) {
+        status.textContent = "";
+        showError(e.message);
+      }
+    });
+    row.append(b);
+  }
+  row.append(status);
+  return row;
+}
+
+async function onSurvey(event) {
+  event.preventDefault();
+  const helpful = document.querySelector('input[name="helpful"]:checked');
+  const useful = document.querySelector('input[name="most_useful"]:checked');
+  if (!helpful || !useful) return showError("Please answer both questions.");
+  try {
+    await api("POST", "/api/cases/" + caseId + "/survey", { helpful: Number(helpful.value), most_useful: useful.value });
+    showError("");
+    $("#survey-thanks").hidden = false;
+  } catch (e) {
+    showError(e.message);
+  }
 }
 
 function renderLines(c) {
@@ -415,6 +453,8 @@ function reset(message) {
   [...document.querySelectorAll(".eob-file")].slice(1).forEach((i) => i.remove());
   $("#add-eob").hidden = false;
   $("#letter-form").reset();
+  $("#survey-form").reset();
+  $("#survey-thanks").hidden = true;
   showError(message || "");
   show("upload-view");
 }
@@ -443,6 +483,7 @@ async function deleteCase() {
 document.addEventListener("DOMContentLoaded", () => {
   $("#upload-form").addEventListener("submit", onUpload);
   $("#add-eob").addEventListener("click", addEobInput);
+  $("#survey-form").addEventListener("submit", onSurvey);
   $("#confirm-form").addEventListener("submit", onConfirm);
   $("#letter-form").addEventListener("submit", onLetter);
   $("#copy-letter").addEventListener("click", onCopy);

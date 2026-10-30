@@ -147,6 +147,12 @@ button:disabled { opacity: 0.6; cursor: progress; }
 .evidence .src { color: var(--muted); display: block; font-size: 0.8rem; }
 .evidence q { font-family: var(--mono); font-size: 0.85rem; quotes: none; background: var(--bg); padding: 2px 6px; border-radius: 4px; display: inline-block; overflow-wrap: anywhere; }
 .include { font-weight: 400; display: flex; gap: 8px; align-items: center; margin: 0; }
+.feedback { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border); }
+.feedback-q { color: var(--muted); font-size: 0.9rem; margin-right: 4px; }
+button.small { padding: 4px 10px; font-size: 0.85rem; }
+button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); font-weight: 600; }
+.thanks { color: var(--ok); font-size: 0.9rem; font-weight: 600; }
+.scale { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 .none-found { color: var(--ok); font-weight: 600; }
 
 .table-wrap { overflow-x: auto; }

@@ -369,3 +369,49 @@ def test_too_many_eobs_rejected(client):
     bill_id = upload(client, "bill", render_bill(BY_NAME["clean"].bill)).json()["upload_id"]
     r = client.post("/api/cases", json={"bill_upload_id": bill_id, "eob_upload_ids": ids})
     assert r.status_code == 422
+
+
+# --- Feedback ---------------------------------------------------------------------------------
+
+
+def test_flag_feedback_and_survey_are_stored_without_case_data(client, llm):
+    case_id = start_case(client, llm, "denial")
+    flags = client.get("/api/cases/" + case_id).json()["flags"]
+    url = "/api/cases/{}/feedback".format(case_id)
+    assert client.post(url, json={"flag_id": flags[0]["flag_id"], "verdict": "incorrect"}).status_code == 204
+    assert client.post(url, json={"flag_id": flags[0]["flag_id"], "verdict": "correct"}).status_code == 204  # changed mind
+    assert client.post(url, json={"flag_id": flags[1]["flag_id"], "verdict": "unsure"}).status_code == 204
+    assert client.post("/api/cases/{}/survey".format(case_id), json={"helpful": 4, "most_useful": "letter"}).status_code == 204
+
+    store = client.app.state.store
+    rows = store.feedback_rows()
+    assert sorted((r["rule"], r["verdict"]) for r in rows["flags"]) == [
+        ("balance_mismatch", "correct"),
+        ("billed_after_denial", "unsure"),
+    ]
+    assert rows["survey"] == [{"helpful": 4, "most_useful": "letter", "flag_count": 2, "had_eob": 1}]
+    import sqlite3
+
+    db = sqlite3.connect(str(store.root / "index.sqlite3"))
+    stored = repr(db.execute("SELECT * FROM flag_feedback").fetchall() + db.execute("SELECT * FROM survey").fetchall())
+    assert case_id not in stored and flags[0]["flag_id"] not in stored and "L2" not in stored
+
+
+def test_feedback_survives_case_deletion(client, llm):
+    case_id = start_case(client, llm, "duplicate")
+    flag_id = client.get("/api/cases/" + case_id).json()["flags"][0]["flag_id"]
+    client.post("/api/cases/{}/feedback".format(case_id), json={"flag_id": flag_id, "verdict": "correct"})
+    client.delete("/api/cases/" + case_id)
+    assert len(client.app.state.store.feedback_rows()["flags"]) == 1
+
+
+def test_feedback_validation(client, llm):
+    case_id = start_case(client, llm, "duplicate")
+    url = "/api/cases/{}/feedback".format(case_id)
+    assert client.post(url, json={"flag_id": "made-up", "verdict": "correct"}).status_code == 404
+    flag_id = client.get("/api/cases/" + case_id).json()["flags"][0]["flag_id"]
+    assert client.post(url, json={"flag_id": flag_id, "verdict": "maybe"}).status_code == 422
+    survey = "/api/cases/{}/survey".format(case_id)
+    assert client.post(survey, json={"helpful": 6, "most_useful": "letter"}).status_code == 422
+    other = TestClient(client.app)
+    assert other.post(url, json={"flag_id": flag_id, "verdict": "correct"}).status_code == 404

@@ -152,6 +152,32 @@
         </div>
       </div>
 
+      <div class="card" id="survey-card">
+        <h2>Help us improve</h2>
+        <form id="survey-form" novalidate>
+          <fieldset class="field">
+            <legend>How helpful was this?</legend>
+            <div class="scale">
+              <label class="choice"><input type="radio" name="helpful" value="1"> 1 Not helpful</label>
+              <label class="choice"><input type="radio" name="helpful" value="2"> 2</label>
+              <label class="choice"><input type="radio" name="helpful" value="3"> 3</label>
+              <label class="choice"><input type="radio" name="helpful" value="4"> 4</label>
+              <label class="choice"><input type="radio" name="helpful" value="5"> 5 Very helpful</label>
+            </div>
+          </fieldset>
+          <fieldset class="field">
+            <legend>What helped most?</legend>
+            <label class="choice"><input type="radio" name="most_useful" value="explanation"> Understanding my bill</label>
+            <label class="choice"><input type="radio" name="most_useful" value="letter"> The letter</label>
+            <label class="choice"><input type="radio" name="most_useful" value="both"> Both</label>
+            <label class="choice"><input type="radio" name="most_useful" value="neither"> Neither</label>
+          </fieldset>
+          <button type="submit">Send</button>
+          <p id="survey-thanks" class="thanks" hidden>Thank you!</p>
+        </form>
+        <p class="hint">Answers are anonymous and contain nothing from your bill.</p>
+      </div>
+
       <div class="card actions-card">
         <button id="new-bill" type="button">Check another bill</button>
         <button id="delete-case" type="button" class="danger">Delete my data now</button>
