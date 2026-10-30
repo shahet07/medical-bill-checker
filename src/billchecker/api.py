@@ -1,11 +1,14 @@
 """HTTP API.
 
-No accounts in v1: an anonymous session cookie (HttpOnly, Secure,
-SameSite=Strict) scopes everything. Another session's IDs return 404, the
-same as IDs that do not exist. Patient details for letters are used once to
-render the letter and are never stored.
+Every case belongs to a logged-in user (email + password). The login cookie
+is HttpOnly, Secure, SameSite=Strict, and holds a random token stored only as
+a hash. Another user's IDs return 404, the same as IDs that do not exist.
+State-changing requests from another site's pages are refused (Origin check).
+Patient details for letters are used once to render the letter and never stored.
 
 Run locally:
+    scripts/dev_db.sh start
+    export DATABASE_URL=postgresql://billchecker@127.0.0.1:54329/billchecker
     export BILLCHECKER_KEY=$(python -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())")
     export GEMINI_API_KEY=...
     .venv/bin/uvicorn --factory billchecker.api:app_from_env
@@ -13,7 +16,6 @@ Run locally:
 
 import logging
 import os
-import secrets
 import threading
 import time
 from collections import defaultdict, deque
@@ -26,10 +28,12 @@ from pathlib import Path
 from typing import Callable, Deque, Dict, List, Literal, Optional, Tuple
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
+from . import auth
+from .auth import AuthError
 from .ingest import MAX_BYTES, MAX_FILES, IngestError, ingest_many, sniff_type
 from .letters import (
     MAX_NOTE_CHARS,
@@ -45,7 +49,7 @@ from .llm import JsonLLM, make_llm
 from .models import Bill, Eob, Flag, Money
 from .pipeline import CaseRunner
 from .reference import Reference, load_pairs, load_prices
-from .store import Store, hash_session, load_key, pack_files
+from .store import Store, UserRow, load_key, pack_files
 
 log = logging.getLogger("billchecker.api")
 
@@ -58,13 +62,22 @@ CSP = (
 SESSION_COOKIE = "bc_session"
 MIME = {"pdf": "application/pdf", "png": "image/png", "jpeg": "image/jpeg", "heic": "image/heic"}
 MAX_EOBS = 5
-# action -> (max requests, window in seconds), per session
-DEFAULT_LIMITS = {"upload": (20, 3600), "case": (10, 3600), "letter": (60, 3600), "confirm": (20, 3600), "feedback": (100, 3600)}
+# action -> (max requests, window in seconds). Per user, except login/register: per IP address.
+DEFAULT_LIMITS = {
+    "upload": (20, 3600),
+    "case": (10, 3600),
+    "letter": (60, 3600),
+    "confirm": (20, 3600),
+    "feedback": (100, 3600),
+    "login": (20, 900),
+    "register": (5, 3600),
+    "account": (10, 3600),
+}
 
 
 @dataclass
 class Settings:
-    data_dir: Path
+    database_url: str
     key: bytes
     llm: JsonLLM
     reference: Reference = field(default_factory=Reference)
@@ -81,6 +94,30 @@ class Settings:
 
 class _Body(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+class Register(_Body):
+    email: str = Field(max_length=254)
+    password: str = Field(max_length=auth.MAX_PASSWORD)
+    research_consent: bool = False
+
+
+class Login(_Body):
+    email: str = Field(max_length=254)
+    password: str = Field(max_length=auth.MAX_PASSWORD)
+
+
+class ChangePassword(_Body):
+    current_password: str = Field(max_length=auth.MAX_PASSWORD)
+    new_password: str = Field(max_length=auth.MAX_PASSWORD)
+
+
+class Consent(_Body):
+    research_consent: bool
+
+
+class DeleteAccount(_Body):
+    password: str = Field(max_length=auth.MAX_PASSWORD)
 
 
 class CreateCase(_Body):
@@ -210,11 +247,11 @@ class RateLimiter:
         self._hits: Dict[Tuple[str, str], Deque[float]] = defaultdict(deque)
         self._lock = threading.Lock()
 
-    def check(self, session_hash: str, action: str) -> None:
+    def check(self, who: str, action: str) -> None:
         count, window = self.limits[action]
         now = time.monotonic()
         with self._lock:
-            hits = self._hits[(session_hash, action)]
+            hits = self._hits[(who, action)]
             while hits and hits[0] <= now - window:
                 hits.popleft()
             if len(hits) >= count:
@@ -226,7 +263,7 @@ class RateLimiter:
 
 
 def create_app(settings: Settings) -> FastAPI:
-    store = Store(settings.data_dir, settings.key, now=settings.now)
+    store = Store(settings.database_url, settings.key, now=settings.now)
     runner = CaseRunner(store, settings.llm, inline=settings.inline_jobs, reference=settings.reference)
     limiter = RateLimiter(settings.limits)
 
@@ -247,6 +284,7 @@ def create_app(settings: Settings) -> FastAPI:
         yield
         stop.set()
         runner.shutdown()
+        store.close()
 
     app = FastAPI(title="Medical Bill Checker", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.store = store
@@ -254,6 +292,11 @@ def create_app(settings: Settings) -> FastAPI:
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
+        # Refuse state-changing API calls made from another site's pages.
+        if request.method not in ("GET", "HEAD", "OPTIONS") and request.url.path.startswith("/api/"):
+            origin = request.headers.get("origin")
+            if origin and origin.split("://", 1)[-1] != request.headers.get("host", ""):
+                return JSONResponse({"detail": {"error": "bad_origin", "message": "Request refused."}}, status_code=403)
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
@@ -270,30 +313,149 @@ def create_app(settings: Settings) -> FastAPI:
 
     app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
-    def session(request: Request, response: Response) -> str:
+    def current_user(request: Request) -> UserRow:
         token = request.cookies.get(SESSION_COOKIE)
-        if not token:
-            token = secrets.token_urlsafe(32)
-            response.set_cookie(
-                SESSION_COOKIE,
-                token,
-                max_age=int(store.ttl.total_seconds()),
-                httponly=True,
-                secure=settings.secure_cookies,
-                samesite="strict",
-            )
-        return hash_session(token)
+        user = store.session_user(token) if token else None
+        if user is None:
+            raise _error(401, "login_required", "Please log in.")
+        return user
 
-    def own_case(case_id: str, sess: str):
-        case = store.get_case(sess, case_id) if len(case_id) == 32 else None
+    def client_ip(request: Request) -> str:
+        return request.client.host if request.client else "unknown"
+
+    def start_session(response: Response, user: UserRow) -> None:
+        token = store.create_session(user.user_id)
+        response.set_cookie(
+            SESSION_COOKIE,
+            token,
+            max_age=int(store.session_ttl.total_seconds()),
+            httponly=True,
+            secure=settings.secure_cookies,
+            samesite="strict",
+        )
+
+    def end_session(response: Response) -> None:
+        response.delete_cookie(SESSION_COOKIE, secure=settings.secure_cookies, httponly=True, samesite="strict")
+
+    def auth_error(exc: AuthError) -> HTTPException:
+        status = {"email_taken": 409, "bad_login": 401, "bad_password": 401, "locked": 429}.get(exc.code, 422)
+        return _error(status, exc.code, exc.message)
+
+    def me(user: UserRow) -> dict:
+        return {"email": user.email, "research_consent": user.research_consent, "created_at": user.created_at.isoformat()}
+
+    def own_case(case_id: str, user_id: str):
+        case = store.get_case(user_id, case_id)
         if case is None:
             raise _error(404, "not_found", "Case not found. It may have expired.")
         return case
 
+    # --- Accounts -----------------------------------------------------------------------------
+
+    @app.post("/api/auth/register", status_code=201)
+    def register(body: Register, request: Request, response: Response):
+        limiter.check(client_ip(request), "register")
+        try:
+            user = auth.register(store, body.email, body.password, body.research_consent)
+        except AuthError as exc:
+            raise auth_error(exc)
+        start_session(response, user)
+        store.record_event("signup", user.user_id, research_consent=user.research_consent)
+        return me(user)
+
+    @app.post("/api/auth/login")
+    def login(body: Login, request: Request, response: Response):
+        limiter.check(client_ip(request), "login")
+        try:
+            user = auth.login(store, body.email, body.password)
+        except AuthError as exc:
+            raise auth_error(exc)
+        old = request.cookies.get(SESSION_COOKIE)
+        if old:
+            store.delete_session(old)
+        start_session(response, user)
+        store.record_event("login", user.user_id)
+        return me(user)
+
+    @app.post("/api/auth/logout", status_code=204)
+    def logout(request: Request):
+        token = request.cookies.get(SESSION_COOKIE)
+        if token:
+            store.delete_session(token)
+        response = Response(status_code=204)
+        end_session(response)
+        return response
+
+    @app.get("/api/auth/session")
+    def session_status(request: Request):
+        """Who is logged in, if anyone. Unlike /me, a logged-out browser gets 200, not an error."""
+        token = request.cookies.get(SESSION_COOKIE)
+        user = store.session_user(token) if token else None
+        return {"user": me(user) if user else None}
+
+    @app.get("/api/auth/me")
+    def whoami(user: UserRow = Depends(current_user)):
+        return me(user)
+
+    @app.post("/api/auth/password", status_code=204)
+    def change_password(body: ChangePassword, request: Request, user: UserRow = Depends(current_user)):
+        limiter.check(user.user_id, "account")
+        try:
+            auth.change_password(
+                store, user, body.current_password, body.new_password, keep_session=request.cookies.get(SESSION_COOKIE)
+            )
+        except AuthError as exc:
+            raise auth_error(exc)
+        store.record_event("password_changed", user.user_id)
+        return Response(status_code=204)
+
+    @app.put("/api/auth/consent")
+    def set_consent(body: Consent, user: UserRow = Depends(current_user)):
+        store.set_consent(user.user_id, body.research_consent)
+        if not body.research_consent:
+            for case in store.list_cases(user.user_id):
+                store.delete_research(case.case_id)
+        store.record_event("consent_changed", user.user_id, research_consent=body.research_consent)
+        return me(store.get_user(user.user_id))
+
+    @app.delete("/api/auth/account", status_code=204)
+    def delete_account(body: DeleteAccount, user: UserRow = Depends(current_user)):
+        limiter.check(user.user_id, "account")
+        if not auth.verify_password(user.password_hash, body.password):
+            raise _error(401, "bad_password", "Your password is incorrect.")
+        store.record_event("account_deleted", user.user_id)
+        store.delete_user(user.user_id)
+        response = Response(status_code=204)
+        end_session(response)
+        return response
+
+    # --- Cases --------------------------------------------------------------------------------
+
+    @app.get("/api/cases")
+    def list_cases(user: UserRow = Depends(current_user)):
+        out = []
+        for case in store.list_cases(user.user_id):
+            result = store.get_result(case.case_id) or {}
+            bill = result.get("bill") or {}
+            totals = bill.get("totals") or {}
+            out.append(
+                {
+                    "case_id": case.case_id,
+                    "status": case.status,
+                    "created_at": case.created_at,
+                    "expires_at": case.expires_at,
+                    "provider_name": bill.get("provider_name"),
+                    "statement_date": bill.get("statement_date"),
+                    "amount_due": totals.get("patient_balance"),
+                    "flag_count": len(result.get("flags") or []),
+                }
+            )
+        return {"cases": out}
+
     @app.post("/api/uploads", status_code=201)
-    def upload(kind: Literal["bill", "eob"] = Form(...), file: List[UploadFile] = File(...), sess: str = Depends(session)):
+    def upload(kind: Literal["bill", "eob"] = Form(...), file: List[UploadFile] = File(...), user: UserRow = Depends(current_user)):
         """One document, as one file or several (e.g. a photo of each page)."""
-        limiter.check(sess, "upload")
+        limiter.check(user.user_id, "upload")
         if len(file) > MAX_FILES:
             raise _error(422, "too_many_files", "Please upload at most 10 files at a time.")
         files, total = [], 0
@@ -308,30 +470,32 @@ def create_app(settings: Settings) -> FastAPI:
         except IngestError as exc:
             raise _error(422, exc.code, exc.message)
         mime = MIME[sniff_type(files[0])] if len(files) == 1 else "multipart/mixed"
-        row = store.add_upload(sess, kind, mime, len(doc.pages), pack_files(files))
+        row = store.add_upload(user.user_id, kind, mime, len(doc.pages), pack_files(files))
+        store.record_event("upload", user.user_id, kind=kind, pages=row.page_count, files=len(files))
         return {"upload_id": row.upload_id, "kind": kind, "page_count": row.page_count, "expires_at": row.expires_at}
 
     @app.post("/api/cases", status_code=201)
-    def create_case(body: CreateCase, sess: str = Depends(session)):
-        limiter.check(sess, "case")
-        bill = store.get_upload(sess, body.bill_upload_id) if len(body.bill_upload_id) == 32 else None
+    def create_case(body: CreateCase, user: UserRow = Depends(current_user)):
+        limiter.check(user.user_id, "case")
+        bill = store.get_upload(user.user_id, body.bill_upload_id)
         if bill is None or bill.kind != "bill":
             raise _error(404, "not_found", "Bill upload not found. It may have expired.")
         eob_ids = list(dict.fromkeys(body.eob_upload_ids + ([body.eob_upload_id] if body.eob_upload_id else [])))
         if len(eob_ids) > MAX_EOBS:
             raise _error(422, "too_many_eobs", "Please add at most 5 EOBs to one bill.")
         for eob_id in eob_ids:
-            eob = store.get_upload(sess, eob_id) if len(eob_id) == 32 else None
+            eob = store.get_upload(user.user_id, eob_id)
             if eob is None or eob.kind != "eob":
                 raise _error(404, "not_found", "EOB upload not found. It may have expired.")
-        case = store.add_case(sess, body.bill_upload_id, eob_ids, body.language)
+        case = store.add_case(user.user_id, body.bill_upload_id, eob_ids, body.language)
+        store.record_event("case_created", user.user_id, eobs=len(eob_ids), language=body.language)
         runner.submit(case.case_id)
-        case = store.get_case(sess, case.case_id)
+        case = store.get_case(user.user_id, case.case_id)
         return {"case_id": case.case_id, "status": case.status}
 
     @app.get("/api/cases/{case_id}")
-    def get_case(case_id: str, sess: str = Depends(session)):
-        case = own_case(case_id, sess)
+    def get_case(case_id: str, user: UserRow = Depends(current_user)):
+        case = own_case(case_id, user.user_id)
         out = {
             "case_id": case.case_id,
             "status": case.status,
@@ -351,9 +515,9 @@ def create_app(settings: Settings) -> FastAPI:
         return out
 
     @app.post("/api/cases/{case_id}/confirm")
-    def confirm(case_id: str, body: ConfirmTotals, sess: str = Depends(session)):
-        limiter.check(sess, "confirm")
-        case = own_case(case_id, sess)
+    def confirm(case_id: str, body: ConfirmTotals, user: UserRow = Depends(current_user)):
+        limiter.check(user.user_id, "confirm")
+        case = own_case(case_id, user.user_id)
         if case.status != "needs_confirmation":
             raise _error(409, "wrong_status", "This case does not need confirmation.")
         result = store.get_result(case.case_id)
@@ -363,12 +527,12 @@ def create_app(settings: Settings) -> FastAPI:
         store.put_result(case.case_id, dict(result, bill=bill.model_dump(mode="json"), confirmed=True, problems=[]))
         store.set_status(case.case_id, "queued")
         runner.submit(case.case_id)
-        return {"case_id": case.case_id, "status": store.get_case(sess, case.case_id).status}
+        return {"case_id": case.case_id, "status": store.get_case(user.user_id, case.case_id).status}
 
     @app.put("/api/cases/{case_id}/bill")
-    def edit_bill(case_id: str, body: BillEdit, sess: str = Depends(session)):
-        limiter.check(sess, "confirm")
-        case = own_case(case_id, sess)
+    def edit_bill(case_id: str, body: BillEdit, user: UserRow = Depends(current_user)):
+        limiter.check(user.user_id, "confirm")
+        case = own_case(case_id, user.user_id)
         if case.status not in ("ready", "needs_confirmation"):
             raise _error(409, "wrong_status", "The bill can be edited once it has been read.")
         result = store.get_result(case.case_id)
@@ -377,30 +541,32 @@ def create_app(settings: Settings) -> FastAPI:
         except ValueError:
             raise _error(422, "invalid_edit", "Some of the corrected values are not valid.")
         result = dict(result, bill=bill.model_dump(mode="json"), confirmed=True, user_edited=True, problems=[])
+        store.record_event("bill_edited", user.user_id)
         store.put_result(case.case_id, dict(result, flags=[], explanations=None))
         store.set_status(case.case_id, "queued")
         runner.submit(case.case_id)
-        return {"case_id": case.case_id, "status": store.get_case(sess, case.case_id).status}
+        return {"case_id": case.case_id, "status": store.get_case(user.user_id, case.case_id).status}
 
     @app.put("/api/cases/{case_id}/language")
-    def change_language(case_id: str, body: LanguageChange, sess: str = Depends(session)):
+    def change_language(case_id: str, body: LanguageChange, user: UserRow = Depends(current_user)):
         """Rewrite the explanations in another language. Checks and flags do not change."""
-        limiter.check(sess, "confirm")
-        case = own_case(case_id, sess)
+        limiter.check(user.user_id, "confirm")
+        case = own_case(case_id, user.user_id)
         if case.status != "ready":
             raise _error(409, "wrong_status", "This is available once the bill has been checked.")
         if case.language != body.language:
             result = store.get_result(case.case_id)
             store.set_language(case.case_id, body.language)
+            store.record_event("language_switched", user.user_id, language=body.language)
             store.put_result(case.case_id, dict(result, confirmed=True))
             store.set_status(case.case_id, "queued")
             runner.submit(case.case_id)
-        return {"case_id": case.case_id, "status": store.get_case(sess, case.case_id).status}
+        return {"case_id": case.case_id, "status": store.get_case(user.user_id, case.case_id).status}
 
     @app.post("/api/cases/{case_id}/letter")
-    def letter(case_id: str, body: LetterRequest, sess: str = Depends(session)):
-        limiter.check(sess, "letter")
-        case = own_case(case_id, sess)
+    def letter(case_id: str, body: LetterRequest, user: UserRow = Depends(current_user)):
+        limiter.check(user.user_id, "letter")
+        case = own_case(case_id, user.user_id)
         if case.status != "ready":
             raise _error(409, "wrong_status", "Letters are available once the bill has been checked.")
         result = store.get_result(case.case_id)
@@ -432,6 +598,7 @@ def create_app(settings: Settings) -> FastAPI:
                 out = dispute(bill, eob, flags, patient, today, body.note)
         except ValueError:
             raise _error(422, "invalid_letter", "The letter could not be created from these details.")
+        store.record_event("letter_created", user.user_id, kind=out.kind, format=body.format)
         if body.format == "pdf":
             filename = out.kind.replace("_", "-") + ".pdf"
             return Response(
@@ -441,34 +608,37 @@ def create_app(settings: Settings) -> FastAPI:
             )
         return {"kind": out.kind, "subject": out.subject, "text": out.text}
 
-    def ready_result(case_id: str, sess: str):
-        case = own_case(case_id, sess)
+    def ready_result(case_id: str, user_id: str):
+        case = own_case(case_id, user_id)
         if case.status != "ready":
             raise _error(409, "wrong_status", "This is available once the bill has been checked.")
         return case, store.get_result(case.case_id)
 
     @app.post("/api/cases/{case_id}/feedback", status_code=204)
-    def flag_feedback(case_id: str, body: FlagFeedback, sess: str = Depends(session)):
-        limiter.check(sess, "feedback")
-        case, result = ready_result(case_id, sess)
+    def flag_feedback(case_id: str, body: FlagFeedback, user: UserRow = Depends(current_user)):
+        limiter.check(user.user_id, "feedback")
+        case, result = ready_result(case_id, user.user_id)
         flag = next((f for f in result["flags"] if f["flag_id"] == body.flag_id), None)
         if flag is None:
             raise _error(404, "not_found", "That item is not part of this case.")
         model = getattr(settings.llm, "model", None)
         store.record_flag_feedback(case.case_id, flag["flag_id"], flag["rule"], flag["confidence"], body.verdict, model)
+        store.record_event("flag_feedback", user.user_id, verdict=body.verdict)
         return Response(status_code=204)
 
     @app.post("/api/cases/{case_id}/survey", status_code=204)
-    def survey(case_id: str, body: Survey, sess: str = Depends(session)):
-        limiter.check(sess, "feedback")
-        case, result = ready_result(case_id, sess)
+    def survey(case_id: str, body: Survey, user: UserRow = Depends(current_user)):
+        limiter.check(user.user_id, "feedback")
+        case, result = ready_result(case_id, user.user_id)
         store.record_survey(case.case_id, body.helpful, body.most_useful, len(result["flags"]), bool(result.get("eob")))
+        store.record_event("survey", user.user_id)
         return Response(status_code=204)
 
     @app.delete("/api/cases/{case_id}", status_code=204)
-    def delete_case(case_id: str, sess: str = Depends(session)):
-        if not (len(case_id) == 32 and store.delete_case(sess, case_id)):
+    def delete_case(case_id: str, user: UserRow = Depends(current_user)):
+        if not store.delete_case(user.user_id, case_id):
             raise _error(404, "not_found", "Case not found. It may have expired.")
+        store.record_event("case_deleted", user.user_id)
         return Response(status_code=204)
 
     return app
@@ -476,7 +646,9 @@ def create_app(settings: Settings) -> FastAPI:
 
 def app_from_env() -> FastAPI:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
-    data_dir = Path(os.environ.get("BILLCHECKER_DATA_DIR", Path.home() / ".billchecker" / "data"))
+    database_url = os.environ.get("DATABASE_URL")
+    if not database_url:
+        raise RuntimeError("DATABASE_URL is not set")
     ncci, prices = os.environ.get("BILLCHECKER_NCCI_FILE"), os.environ.get("BILLCHECKER_PRICES_FILE")
     reference = Reference(
         pairs=load_pairs(Path(ncci)) if ncci else None,
@@ -485,7 +657,7 @@ def app_from_env() -> FastAPI:
     )
     return create_app(
         Settings(
-            data_dir=data_dir,
+            database_url=database_url,
             key=load_key(os.environ.get("BILLCHECKER_KEY")),
             llm=make_llm(),
             reference=reference,

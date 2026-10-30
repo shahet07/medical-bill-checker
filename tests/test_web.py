@@ -154,6 +154,8 @@ def test_rule_titles_cover_every_rule(i18n):
 def test_server_error_codes_have_spanish(i18n):
     api = (Path(__file__).resolve().parent.parent / "src" / "billchecker" / "api.py").read_text()
     ingest = (Path(__file__).resolve().parent.parent / "src" / "billchecker" / "ingest.py").read_text()
+    auth = (Path(__file__).resolve().parent.parent / "src" / "billchecker" / "auth.py").read_text()
     codes = set(re.findall(r'_error\(\d+, "([a-z_]+)"', api)) | set(re.findall(r'IngestError\(\s*"([a-z_]+)"', ingest))
+    codes |= set(re.findall(r'AuthError\(\s*"([a-z_]+)"', auth)) | set(re.findall(r'"error": "([a-z_]+)"', api))
     codes -= {"expired"}  # only shown via the failed-case screen, which has its own text
     assert codes - set(i18n["SERVER_ERRORS_ES"]) == set()

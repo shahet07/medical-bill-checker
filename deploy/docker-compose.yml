@@ -1,16 +1,34 @@
-# One small server: the app plus Caddy, which gets and renews the HTTPS
-# certificate automatically. Point your domain's DNS at the server first.
+# One small server: PostgreSQL, the app, and Caddy (automatic HTTPS).
+# Point your domain's DNS at the server first.
 #
 #   cp deploy/.env.example deploy/.env    # then fill it in
 #   docker compose -f deploy/docker-compose.yml up -d --build
 services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: billchecker
+      POSTGRES_DB: billchecker
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U billchecker -d billchecker"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    # Not published on the host; only the app connects.
+
   app:
     build: ..
     env_file: .env
-    volumes:
-      - data:/data
+    environment:
+      DATABASE_URL: postgresql://billchecker:${POSTGRES_PASSWORD}@db:5432/billchecker
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
-    # Only Caddy talks to the app; it is not published on the host.
     expose:
       - "8000"
 
@@ -30,6 +48,6 @@ services:
     restart: unless-stopped
 
 volumes:
-  data:
+  pgdata:
   caddy_data:
   caddy_config:

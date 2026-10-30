@@ -15,11 +15,12 @@ MVP per `medical_bill_checker_design.md` and `medical_bill_checker_hld_lld.md`.
 - [x] API: sessions, encrypted 24h storage, background jobs (`src/billchecker/api.py`, `store.py`, `pipeline.py`)
 - [x] Web UI: upload, results, letters, delete (`src/billchecker/web/`)
 - [x] iPhone photos, multi-page photo uploads, several EOBs per bill
-- [x] Feedback per flag and a short survey (`scripts/feedback_report.py`)
+- [x] Feedback per flag and a short survey (`scripts/admin.py stats`)
 - [x] Letters: dispute, itemized request, financial assistance, payment plan, insurer appeal; PDF download
 - [x] Checks: duplicates, balance, denial, network, itemization, not on EOB, charge mismatch, payment not applied
 - [x] Edit any line or total; glossary; Spanish
 - [x] Optional NCCI unbundling and reference prices (engines only; licensed data not included)
+- [x] Accounts (email + password), saved bills for 90 days, opt-in research dataset, usage analytics, PostgreSQL
 - [x] Docker + HTTPS deployment (`deploy/DEPLOY.md`)
 
 ## Setup
@@ -27,44 +28,60 @@ MVP per `medical_bill_checker_design.md` and `medical_bill_checker_hld_lld.md`.
 ```sh
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
-.venv/bin/python -m pytest          # no network, no cost
+scripts/dev_db.sh start             # private PostgreSQL in .pgdata, port 54329
+.venv/bin/python -m pytest          # no network, no LLM cost
 ```
 
 ## Running the app
 
-Start the server as below, then open http://127.0.0.1:8765. The page uploads a bill (and an EOB, optionally), shows each line with a plain-language explanation and the flags with their evidence, creates a letter, and lets the user delete everything.
-
-It's plain HTML/CSS/JS with no third-party scripts. A strict Content-Security-Policy blocks inline scripts, and bill data is only inserted as text. `scripts/ui_check.py` drives the whole flow in headless Chrome.
-
-## Running the API
-
 ```sh
-export BILLCHECKER_KEY=$(.venv/bin/python -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())")
+scripts/dev_db.sh start
+cp .env.dev.example .env.dev        # first time only; then generate a key into it (see the file)
+set -a; . ./.env.dev; set +a
 export GEMINI_API_KEY=...
-export BILLCHECKER_INSECURE_COOKIES=1   # local http only; never in production
 .venv/bin/uvicorn --factory billchecker.api:app_from_env --port 8765
 ```
 
-Keep `BILLCHECKER_KEY` outside the repo. If you lose it, you can no longer read stored data, which is acceptable because everything expires within 24 hours. Data is stored in `~/.billchecker/data`; change it with `BILLCHECKER_DATA_DIR`.
+Open http://127.0.0.1:8765 and create an account. Users can upload a bill (and EOBs), see each line explained and the flags with their evidence, create letters, revisit past bills from **My bills**, and manage or delete their account.
+
+The page is plain HTML/CSS/JS with no third-party scripts. A strict Content-Security-Policy blocks inline scripts, and bill data is only inserted as text. `scripts/ui_check.py` drives the whole flow in headless Chrome.
+
+## Accounts and data
+
+- **Login:** email and password. Passwords are hashed with Argon2id. Login attempts are limited per IP address, and an account locks for 15 minutes after 10 failed tries. Error messages don't reveal whether an email has an account. Changing your password logs out your other sessions.
+- **Retention:** uploaded files are deleted after 24 hours. Results are kept for 90 days, or until the user deletes the bill or their account.
+- **Research dataset:** opt-in at signup, and changeable under My account. It holds codes, amounts, flags and the case month, with no names, providers, account numbers, dates or files. See `src/billchecker/research.py`.
+- **Usage analytics:** event counts with a pseudonymous user key, which is unlinked when an account is deleted.
+- **Admin:** `scripts/admin.py stats | reset-password EMAIL | delete-user EMAIL --yes | export-research FILE`.
+
+Full table of what is stored and for how long: `deploy/DEPLOY.md`.
+
+## API
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/api/uploads` | Multipart `kind` (`bill`/`eob`) + `file`. Validated immediately (type, size, pages, readable). |
-| POST | `/api/cases` | `{bill_upload_id, eob_upload_id?}`. Starts the background job. |
-| GET | `/api/cases/{id}` | Status (`queued`, `extracting`, `needs_confirmation`, `ready`, `failed`), data, flags, explanations |
-| POST | `/api/cases/{id}/confirm` | `{billed?, patient_balance?}` when totals need confirming |
-| POST | `/api/cases/{id}/letter` | `{kind, patient, flag_ids?, note?}`. Patient details are not stored. |
-| DELETE | `/api/cases/{id}` | Deletes the case and its uploads immediately |
+| POST | `/api/auth/register` | `{email, password, research_consent}`. Logs in. |
+| POST | `/api/auth/login` · `/api/auth/logout` | Log in / out |
+| GET | `/api/auth/session` · `/api/auth/me` | Who is logged in |
+| POST | `/api/auth/password` | `{current_password, new_password}` |
+| PUT | `/api/auth/consent` | `{research_consent}` |
+| DELETE | `/api/auth/account` | `{password}`. Deletes the account and all its data. |
+| POST | `/api/uploads` | Multipart `kind` (`bill`/`eob`) + one or more `file`. Validated immediately. |
+| GET | `/api/cases` | The user's bills, newest first |
+| POST | `/api/cases` | `{bill_upload_id, eob_upload_ids?, language?}`. Starts the background job. |
+| GET | `/api/cases/{id}` | Status, data, flags, explanations |
+| POST | `/api/cases/{id}/confirm` · PUT `/bill` · PUT `/language` | Confirm totals, correct lines, switch explanation language |
+| POST | `/api/cases/{id}/letter` | `{kind, patient, flag_ids?, note?, format?}`. Patient details are not stored. |
+| POST | `/api/cases/{id}/feedback` · `/survey` | Validation feedback |
+| DELETE | `/api/cases/{id}` | Deletes the bill and its uploads immediately |
 
 Security:
-- Anonymous session cookie (HttpOnly, Secure, SameSite=Strict). Stored only as a hash.
-- Other sessions' IDs return 404.
-- Files are encrypted with AES-256-GCM and named by random IDs.
-- The SQLite index holds no document content.
-- Everything expires after 24 hours, with an hourly cleanup.
-- Per-session rate limits.
+- The login cookie is HttpOnly, Secure and SameSite=Strict, with the token stored only as a hash. State-changing requests from other sites are refused.
+- Another user's IDs return 404.
+- Files and results are encrypted with AES-256-GCM inside PostgreSQL. Each value is bound to its row.
+- Rate limits apply per user, plus per IP address for login and signup.
 - Logs contain only IDs and statuses. pdfminer's debug logging is silenced because it prints page text.
-- No `/docs` or OpenAPI endpoint.
+- There is no `/docs` or OpenAPI endpoint.
 
 If the LLM is unreachable or out of quota, the case goes back to `queued` and is retried every 60 seconds, up to 5 attempts.
 

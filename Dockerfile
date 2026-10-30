@@ -2,8 +2,7 @@
 # Run exactly one container: background jobs and rate limits live in-process.
 FROM python:3.12-slim
 
-RUN useradd --create-home --uid 10001 app \
-    && mkdir /data && chown app /data && chmod 700 /data
+RUN useradd --create-home --uid 10001 app
 
 WORKDIR /app
 COPY pyproject.toml README.md ./
@@ -11,9 +10,7 @@ COPY src ./src
 RUN pip install --no-cache-dir . && rm -rf /root/.cache
 
 USER app
-ENV BILLCHECKER_DATA_DIR=/data \
-    PYTHONUNBUFFERED=1
-VOLUME /data
+ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
 
 # --proxy-headers: HTTPS is terminated by the reverse proxy in front.

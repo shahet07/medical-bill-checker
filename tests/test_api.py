@@ -50,9 +50,20 @@ def llm():
     return RoutingLLM()
 
 
-def make_client(tmp_path, llm, clock, **overrides):
+def signup(c, email="sam@example.com", consent=True):
+    r = c.post("/api/auth/register", json={"email": email, "password": "correct horse battery", "research_consent": consent})
+    assert r.status_code == 201, r.text
+    return c
+
+
+def other_user(client):
+    """A second, separately logged-in user of the same app."""
+    return signup(TestClient(client.app), "other@example.com")
+
+
+def make_client(pg_dsn, llm, clock, **overrides):
     settings = Settings(
-        data_dir=tmp_path / "data",
+        database_url=pg_dsn,
         key=os.urandom(32),
         llm=llm,
         secure_cookies=False,
@@ -67,9 +78,24 @@ def make_client(tmp_path, llm, clock, **overrides):
 
 
 @pytest.fixture
-def client(tmp_path, llm, clock):
-    with make_client(tmp_path, llm, clock) as c:
-        yield c
+def client(pg_dsn, llm, clock):
+    with make_client(pg_dsn, llm, clock) as c:
+        yield signup(c)
+
+
+def db_rows(client, sql):
+    with client.app.state.store.pool.connection() as conn:
+        return conn.execute(sql).fetchall()
+
+
+def db_count(client, table):
+    return db_rows(client, "SELECT count(*) FROM " + table)[0][0]
+
+
+def db_dump(client, *tables):
+    """Everything stored in the given tables (default: all), as text, for leak checks."""
+    tables = tables or ("users", "sessions", "uploads", "cases", "flag_feedback", "survey", "research_cases", "events")
+    return repr([db_rows(client, "SELECT * FROM " + t) for t in tables])
 
 
 def upload(client, kind, data, name="file.pdf"):
@@ -143,9 +169,8 @@ def test_patient_details_are_not_stored(client, llm):
     case_id = start_case(client, llm, "denial")
     client.post("/api/cases/{}/letter".format(case_id), json={"kind": "dispute", "patient": PATIENT})
     store = client.app.state.store
-    for path in store.blobs.iterdir():
-        assert b"Sam Example" not in store.get_blob(path.name)
-    assert b"Sam Example" not in (store.root / "index.sqlite3").read_bytes()
+    assert "Sam Example" not in json.dumps(store.get_result(case_id))
+    assert "Sam Example" not in db_dump(client)
 
 
 # --- Confirmation and failures ----------------------------------------------------------
@@ -240,10 +265,10 @@ def test_upload_kind_must_match(client):
 # --- Sessions, deletion, expiry ------------------------------------------------------------
 
 
-def test_other_sessions_get_404(client, llm, tmp_path, clock):
+def test_other_users_get_404(client, llm):
     case_id = start_case(client, llm, "clean")
     bill_id = upload(client, "bill", render_bill(BY_NAME["clean"].bill)).json()["upload_id"]
-    other = TestClient(client.app)
+    other = other_user(client)
     assert other.get("/api/cases/" + case_id).status_code == 404
     assert other.delete("/api/cases/" + case_id).status_code == 404
     assert other.post("/api/cases", json={"bill_upload_id": bill_id}).status_code == 404
@@ -254,16 +279,22 @@ def test_delete_removes_everything(client, llm):
     case_id = start_case(client, llm, "denial")
     assert client.delete("/api/cases/" + case_id).status_code == 204
     assert client.get("/api/cases/" + case_id).status_code == 404
-    # The case result and both uploads (bill and EOB) are gone.
-    assert list(client.app.state.store.blobs.iterdir()) == []
+    # The case and both uploads (bill and EOB) are gone.
+    assert db_count(client, "cases") == 0 and db_count(client, "uploads") == 0
 
 
-def test_results_expire_after_24_hours(client, llm, clock):
+def test_files_go_after_24_hours_results_after_90_days(client, llm, clock):
     case_id = start_case(client, llm, "clean")
     clock.advance(hours=25)
+    assert client.app.state.store.cleanup()["files_purged"] == 2
+    got = client.get("/api/cases/" + case_id).json()
+    assert got["status"] == "ready" and got["flags"] == []  # results still readable
+    clock.advance(days=90)
+    assert client.get("/api/cases/" + case_id).status_code == 401  # the 14-day login expired too
+    client.post("/api/auth/login", json={"email": "sam@example.com", "password": "correct horse battery"})
     assert client.get("/api/cases/" + case_id).status_code == 404
     client.app.state.store.cleanup()
-    assert list(client.app.state.store.blobs.iterdir()) == []
+    assert db_count(client, "cases") == 0 and db_count(client, "uploads") == 0
 
 
 def test_malformed_ids_are_404(client):
@@ -274,9 +305,9 @@ def test_malformed_ids_are_404(client):
 # --- Cookies, headers, rate limits, logs -------------------------------------------------
 
 
-def test_session_cookie_flags(tmp_path, llm, clock):
-    with make_client(tmp_path, llm, clock, secure_cookies=True) as c:
-        r = upload(c, "bill", render_bill(BY_NAME["clean"].bill))
+def test_session_cookie_flags(pg_dsn, llm, clock):
+    with make_client(pg_dsn, llm, clock, secure_cookies=True) as c:
+        r = c.post("/api/auth/register", json={"email": "s@example.com", "password": "correct horse battery"})
     cookie = r.headers["set-cookie"].lower()
     assert "httponly" in cookie and "samesite=strict" in cookie and "secure" in cookie
 
@@ -292,8 +323,11 @@ def test_no_api_docs_exposed(client):
     assert client.get("/docs").status_code == 404 and client.get("/openapi.json").status_code == 404
 
 
-def test_rate_limit(tmp_path, llm, clock):
-    with make_client(tmp_path, llm, clock, limits={"upload": (2, 3600), "case": (10, 3600), "letter": (10, 3600), "confirm": (10, 3600)}) as c:
+def test_rate_limit(pg_dsn, llm, clock):
+    from billchecker.api import DEFAULT_LIMITS
+
+    with make_client(pg_dsn, llm, clock, limits=dict(DEFAULT_LIMITS, upload=(2, 3600))) as c:
+        signup(c)
         data = render_bill(BY_NAME["clean"].bill)
         assert [upload(c, "bill", data).status_code for _ in range(3)] == [201, 201, 429]
 
@@ -391,11 +425,9 @@ def test_flag_feedback_and_survey_are_stored_without_case_data(client, llm):
         ("balance_mismatch", "correct"),
         ("billed_after_denial", "unsure"),
     ]
-    assert rows["survey"] == [{"helpful": 4, "most_useful": "letter", "flag_count": 2, "had_eob": 1}]
-    import sqlite3
-
-    db = sqlite3.connect(str(store.root / "index.sqlite3"))
-    stored = repr(db.execute("SELECT * FROM flag_feedback").fetchall() + db.execute("SELECT * FROM survey").fetchall())
+    [row] = rows["survey"]
+    assert (row["helpful"], row["most_useful"], row["flag_count"], row["had_eob"]) == (4, "letter", 2, True)
+    stored = db_dump(client, "flag_feedback", "survey")
     assert case_id not in stored and flags[0]["flag_id"] not in stored and "L2" not in stored
 
 
@@ -415,7 +447,7 @@ def test_feedback_validation(client, llm):
     assert client.post(url, json={"flag_id": flag_id, "verdict": "maybe"}).status_code == 422
     survey = "/api/cases/{}/survey".format(case_id)
     assert client.post(survey, json={"helpful": 6, "most_useful": "letter"}).status_code == 422
-    other = TestClient(client.app)
+    other = other_user(client)
     assert other.post(url, json={"flag_id": flag_id, "verdict": "correct"}).status_code == 404
 
 
@@ -500,7 +532,7 @@ def test_edit_validation(client, llm):
     assert client.put(url, json=bad_charge).status_code == 422
     empty_desc = {"line_items": [{"description": "", "charge": "1.00"}], "totals": {}}
     assert client.put(url, json=empty_desc).status_code == 422
-    assert TestClient(client.app).put(url, json={"line_items": [], "totals": {}}).status_code == 404
+    assert other_user(client).put(url, json={"line_items": [], "totals": {}}).status_code == 404
 
 
 @pytest.mark.parametrize(
@@ -539,7 +571,7 @@ def test_switching_language_rewrites_explanations_only(client, llm):
     assert client.put("/api/cases/{}/language".format(case_id), json={"language": "de"}).status_code == 422
 
 
-def test_reference_data_reaches_results(tmp_path, llm, clock):
+def test_reference_data_reaches_results(pg_dsn, llm, clock):
     from decimal import Decimal
 
     from billchecker.reference import PairEdit, Reference
@@ -549,7 +581,8 @@ def test_reference_data_reaches_results(tmp_path, llm, clock):
         prices={"99213": Decimal("92.50")},
         prices_label="Test rate",
     )
-    with make_client(tmp_path, llm, clock, reference=ref) as c:
+    with make_client(pg_dsn, llm, clock, reference=ref) as c:
+        signup(c)
         case_id = start_case(c, llm, "clean")
         got = c.get("/api/cases/" + case_id).json()
     assert [f["rule"] for f in got["flags"]] == ["unbundled_pair"]

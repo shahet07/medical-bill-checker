@@ -1,6 +1,6 @@
 """Browser smoke test: drives the web UI in headless Chrome against a running server.
 
-Covers: upload (bill + EOB), results, feedback, survey, editing a line,
+Covers: sign up, log out/in, history, account page, upload (bill + EOB), results, feedback, survey, editing a line,
 letters (dispute, financial assistance, PDF), Spanish, a two-photo bill,
 phone-sized dark mode, and deletion. Screenshots go to the output directory.
 Uses the real LLM configured on the server.
@@ -36,6 +36,20 @@ with sync_playwright() as p:
     page = ctx.new_page()
     watch(page)
     page.goto(URL)
+
+    # 0. Sign up (unique email per run), with research consent
+    import time
+
+    email = "smoke{}@example.com".format(int(time.time()))
+    page.wait_for_selector("#auth-view:not([hidden])")
+    page.click("#show-register")
+    page.fill("#reg-email", email)
+    page.fill("#reg-password", "correct horse battery")
+    page.check("#reg-consent")
+    page.click("#register-form button[type=submit]")
+    page.wait_for_selector("#upload-view:not([hidden])")
+    print("signed up:", page.inner_text("#user-email"))
+    page.screenshot(path=str(OUT / "0_upload_logged_in.png"), full_page=True)
 
     # 1. Upload a scanned bill + EOB
     page.set_input_files("#bill-file", str(FIX / "denial_bill_scan.pdf"))
@@ -101,13 +115,40 @@ with sync_playwright() as p:
     print("mobile overflow:", m.evaluate("document.documentElement.scrollWidth > window.innerWidth"))
     m.screenshot(path=str(OUT / "4_mobile_dark.png"), full_page=True)
 
-    # 7. Delete
+    # 7. History, log out and back in, reopen from history
+    page.click("#new-bill")
+    page.wait_for_selector("#history:not([hidden])")
+    print("history:", page.locator(".history-item").all_inner_texts())
+    page.click("#logout-button")
+    page.wait_for_selector("#auth-view:not([hidden])")
+    page.fill("#login-email", email)
+    page.fill("#login-password", "correct horse battery")
+    page.click("#login-form button[type=submit]")
+    page.wait_for_selector("#history:not([hidden])")
+    page.locator(".history-item").first.click()
+    results(page, 30000)
+    print("reopened from history after re-login:", page.locator(".flag").count(), "flags")
+
+    # 8. Account page: consent off
+    page.click("#account-button")
+    page.wait_for_selector("#account-view:not([hidden])")
+    page.uncheck("#account-consent")
+    page.click("#consent-form button[type=submit]")
+    page.wait_for_selector("#consent-saved:not([hidden])")
+    page.screenshot(path=str(OUT / "6_account.png"), full_page=True)
+    print("consent saved off")
+    page.click("#account-back")
+    page.wait_for_selector("#upload-view:not([hidden])")
+    page.locator(".history-item").first.click()
+    results(page, 30000)
+
+    # 9. Delete the case
     page.once("dialog", lambda d: d.accept())
     page.click("#delete-case")
     page.wait_for_selector("#upload-view:not([hidden])")
     print("deleted:", page.inner_text("#error-banner"))
 
-    # 8. Bill from two photos, in Spanish
+    # 10. Bill from two photos, in Spanish
     page.click("#lang-toggle")
     page.set_input_files("#bill-file", [str(FIX / "clean_bill_photo.jpg"), str(FIX / "clean_bill_photo.jpg")])
     page.click("#upload-button")
@@ -117,6 +158,15 @@ with sync_playwright() as p:
     page.once("dialog", lambda d: d.accept())
     page.click("#delete-case")
     page.wait_for_selector("#upload-view:not([hidden])")
+
+    # 11. Delete the account
+    page.click("#lang-toggle")
+    page.click("#account-button")
+    page.fill("#del-password", "correct horse battery")
+    page.once("dialog", lambda d: d.accept())
+    page.click("#delete-account-form button[type=submit]")
+    page.wait_for_selector("#auth-view:not([hidden])")
+    print("account deleted:", page.inner_text("#error-banner"))
     browser.close()
 
 print("browser errors:", errors or "none")

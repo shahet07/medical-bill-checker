@@ -14,7 +14,14 @@
     <div class="wrap">
       <div class="header-row">
         <h1 data-i18n="app_title">Medical Bill Checker</h1>
-        <button id="lang-toggle" type="button" class="small" lang="es">Español</button>
+        <div class="header-actions">
+          <span id="user-menu" hidden>
+            <span id="user-email" class="muted"></span>
+            <button id="account-button" type="button" class="small" data-i18n="my_account">My account</button>
+            <button id="logout-button" type="button" class="small" data-i18n="log_out">Log out</button>
+          </span>
+          <button id="lang-toggle" type="button" class="small" lang="es">Español</button>
+        </div>
       </div>
       <p class="tagline" data-i18n="tagline">Understand your medical bill, compare it with your insurance statement, and get a letter to send if something needs checking.</p>
     </div>
@@ -22,6 +29,75 @@
 
   <main class="wrap">
     <p id="error-banner" class="banner banner-error" role="alert" hidden></p>
+
+    <!-- Log in / create account -->
+    <section id="auth-view" class="card narrow" hidden>
+      <form id="login-form" novalidate>
+        <h2 data-i18n="login_title">Log in</h2>
+        <div class="field">
+          <label for="login-email" data-i18n="email_label">Email</label>
+          <input id="login-email" type="email" autocomplete="username" required>
+        </div>
+        <div class="field">
+          <label for="login-password" data-i18n="password_label">Password</label>
+          <input id="login-password" type="password" autocomplete="current-password" required>
+        </div>
+        <button type="submit" class="primary" data-i18n="login_button">Log in</button>
+        <p class="switch"><span data-i18n="no_account">New here?</span> <button id="show-register" type="button" class="link" data-i18n="create_account">Create an account</button></p>
+      </form>
+      <form id="register-form" novalidate hidden>
+        <h2 data-i18n="register_title">Create an account</h2>
+        <div class="field">
+          <label for="reg-email" data-i18n="email_label">Email</label>
+          <input id="reg-email" type="email" autocomplete="username" required>
+        </div>
+        <div class="field">
+          <label for="reg-password" data-i18n="password_label">Password</label>
+          <input id="reg-password" type="password" autocomplete="new-password" minlength="10" required>
+          <p class="hint" data-i18n="password_hint">At least 10 characters. A few words together works well.</p>
+        </div>
+        <label class="consent"><input id="reg-consent" type="checkbox"> <span data-i18n="consent_label">Help improve this tool by letting us keep anonymized results from your bills.</span></label>
+        <p class="hint" data-i18n="consent_detail">If you agree, we keep the codes, amounts and checks found, without your name, provider, account numbers, dates or files. You can change this anytime.</p>
+        <button type="submit" class="primary" data-i18n="register_button">Create account</button>
+        <p class="switch"><span data-i18n="have_account">Already have an account?</span> <button id="show-login" type="button" class="link" data-i18n="login_title">Log in</button></p>
+      </form>
+    </section>
+
+    <!-- Account -->
+    <section id="account-view" class="card narrow" hidden>
+      <h2 data-i18n="my_account">My account</h2>
+      <p><span data-i18n="signed_in_as">Logged in as</span> <strong id="account-email"></strong></p>
+      <form id="consent-form" class="account-block" novalidate>
+        <label class="consent"><input id="account-consent" type="checkbox"> <span data-i18n="consent_label">Help improve this tool by letting us keep anonymized results from your bills.</span></label>
+        <p class="hint" data-i18n="consent_detail">If you agree, we keep the codes, amounts and checks found, without your name, provider, account numbers, dates or files. You can change this anytime.</p>
+        <button type="submit" class="small" data-i18n="save">Save</button>
+        <span id="consent-saved" class="thanks" hidden data-i18n="saved">Saved</span>
+      </form>
+      <form id="password-form" class="account-block" novalidate>
+        <h3 data-i18n="change_password">Change password</h3>
+        <div class="field">
+          <label for="pw-current" data-i18n="current_password">Current password</label>
+          <input id="pw-current" type="password" autocomplete="current-password">
+        </div>
+        <div class="field">
+          <label for="pw-new" data-i18n="new_password">New password</label>
+          <input id="pw-new" type="password" autocomplete="new-password" minlength="10">
+          <p class="hint" data-i18n="password_hint">At least 10 characters. A few words together works well.</p>
+        </div>
+        <button type="submit" class="small" data-i18n="change_password">Change password</button>
+        <span id="password-saved" class="thanks" hidden data-i18n="saved">Saved</span>
+      </form>
+      <form id="delete-account-form" class="account-block" novalidate>
+        <h3 data-i18n="delete_account">Delete my account</h3>
+        <p class="hint" data-i18n="delete_account_detail">This deletes your account and all your bills and results right away. It cannot be undone.</p>
+        <div class="field">
+          <label for="del-password" data-i18n="password_label">Password</label>
+          <input id="del-password" type="password" autocomplete="current-password">
+        </div>
+        <button type="submit" class="small danger" data-i18n="delete_account">Delete my account</button>
+      </form>
+      <button id="account-back" type="button" data-i18n="back">Back</button>
+    </section>
 
     <!-- Upload -->
     <section id="upload-view" class="card" hidden>
@@ -42,7 +118,11 @@
         </div>
         <button id="upload-button" type="submit" class="primary" data-i18n="check_button">Check my bill</button>
       </form>
-      <p class="privacy" data-i18n="privacy">Your files are encrypted and deleted automatically after 24 hours. You can delete them sooner at any time.</p>
+      <p class="privacy" data-i18n="privacy">Your files are encrypted. The original files are deleted after 24 hours; results are kept for 90 days so you can come back to them. You can delete them sooner at any time.</p>
+      <div id="history" hidden>
+        <h2 data-i18n="history_title">My bills</h2>
+        <ul id="history-list" class="history"></ul>
+      </div>
     </section>
 
     <!-- Working -->

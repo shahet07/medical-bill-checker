@@ -8,7 +8,7 @@ const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 const MAX_FILES = 10;
 const MAX_EOBS = 5;
 const CASE_KEY = "billchecker.case";
-const VIEWS = ["upload-view", "status-view", "confirm-view", "failed-view", "results-view"];
+const VIEWS = ["auth-view", "account-view", "upload-view", "status-view", "confirm-view", "failed-view", "results-view"];
 
 const LANG_KEY = "billchecker.lang";
 let LANG = "en";
@@ -19,6 +19,7 @@ function t(key, vars) {
   return text;
 }
 
+let currentUser = null;
 let caseId = null;
 let caseData = null;
 let pollTimer = null;
@@ -45,6 +46,7 @@ function el(tag, attrs, ...children) {
 
 function show(id) {
   for (const v of VIEWS) $("#" + v).hidden = v !== id;
+  $("#user-menu").hidden = !currentUser || id === "auth-view";
   window.scrollTo(0, 0);
 }
 
@@ -101,6 +103,9 @@ async function api(method, path, body) {
   try { data = await resp.json(); } catch (e) { /* non-JSON error page */ }
   if (!resp.ok) {
     const detail = data && data.detail;
+    if (resp.status === 401 && detail && detail.error === "login_required" && !path.startsWith("/api/auth/")) {
+      showAuth(t("session_expired"));
+    }
     const translated = LANG === "es" && detail && SERVER_ERRORS_ES[detail.error];
     const err = new Error(
       translated ? translated
@@ -585,6 +590,7 @@ function reset(message) {
   $("#survey-thanks").hidden = true;
   showError(message || "");
   show("upload-view");
+  loadHistory();
 }
 
 // Failed checks have nothing to come back to, so remove them without asking.
@@ -647,6 +653,149 @@ function initialLanguage() {
   return (navigator.language || "").toLowerCase().startsWith("es") ? "es" : "en";
 }
 
+// --- Accounts ------------------------------------------------------------------------
+
+function showAuth(message, register) {
+  clearTimeout(pollTimer);
+  currentUser = null;
+  caseData = null;
+  remember(null);
+  $("#login-form").hidden = !!register;
+  $("#register-form").hidden = !register;
+  show("auth-view");
+  showError(message || "");
+}
+
+function loggedIn(user) {
+  currentUser = user;
+  $("#user-email").textContent = user.email;
+  $("#login-form").reset();
+  $("#register-form").reset();
+}
+
+async function onLogin(event) {
+  event.preventDefault();
+  showError("");
+  const email = $("#login-email").value.trim();
+  const password = $("#login-password").value;
+  if (!email || !password) return showError(t("err_login_fields"));
+  try {
+    loggedIn(await api("POST", "/api/auth/login", { email, password }));
+    reset();
+  } catch (e) {
+    showError(e.message);
+  }
+}
+
+async function onRegister(event) {
+  event.preventDefault();
+  showError("");
+  const email = $("#reg-email").value.trim();
+  const password = $("#reg-password").value;
+  if (!email || !password) return showError(t("err_login_fields"));
+  try {
+    loggedIn(await api("POST", "/api/auth/register", { email, password, research_consent: $("#reg-consent").checked }));
+    reset();
+  } catch (e) {
+    showError(e.message);
+  }
+}
+
+async function onLogout() {
+  try { await api("POST", "/api/auth/logout"); } catch (e) { /* already logged out */ }
+  showAuth(t("logged_out"));
+}
+
+function openAccount() {
+  showError("");
+  $("#account-email").textContent = currentUser.email;
+  $("#account-consent").checked = !!currentUser.research_consent;
+  $("#consent-saved").hidden = true;
+  $("#password-saved").hidden = true;
+  $("#password-form").reset();
+  $("#delete-account-form").reset();
+  clearTimeout(pollTimer);
+  show("account-view");
+}
+
+async function onConsent(event) {
+  event.preventDefault();
+  try {
+    currentUser = await api("PUT", "/api/auth/consent", { research_consent: $("#account-consent").checked });
+    $("#consent-saved").hidden = false;
+  } catch (e) {
+    showError(e.message);
+  }
+}
+
+async function onChangePassword(event) {
+  event.preventDefault();
+  showError("");
+  const current = $("#pw-current").value;
+  const next = $("#pw-new").value;
+  if (!current || !next) return showError(t("err_new_password"));
+  try {
+    await api("POST", "/api/auth/password", { current_password: current, new_password: next });
+    $("#password-form").reset();
+    $("#password-saved").hidden = false;
+  } catch (e) {
+    showError(e.message);
+  }
+}
+
+async function onDeleteAccount(event) {
+  event.preventDefault();
+  showError("");
+  const password = $("#del-password").value;
+  if (!password) return showError(t("err_login_fields"));
+  if (!window.confirm(t("confirm_delete_account"))) return;
+  try {
+    await api("DELETE", "/api/auth/account", { password });
+    showAuth(t("account_deleted"));
+  } catch (e) {
+    showError(e.message);
+  }
+}
+
+// --- History -------------------------------------------------------------------------
+
+async function loadHistory() {
+  if (!currentUser) return;
+  let data;
+  try {
+    data = await api("GET", "/api/cases");
+  } catch (e) {
+    return;
+  }
+  const list = $("#history-list");
+  list.replaceChildren(
+    ...data.cases.map((c) => {
+      const when = shortDate(c.created_at.slice(0, 10));
+      const detail =
+        c.status === "ready"
+          ? [c.amount_due ? t("history_due", { amount: money(c.amount_due) }) : null, c.flag_count ? t("history_flags", { n: c.flag_count }) : t("history_none")]
+          : [t("status_short_" + c.status)];
+      const button = el(
+        "button",
+        { type: "button", class: "history-item" },
+        el("span", { class: "history-main" }, c.provider_name || t("history_bill")),
+        el("span", { class: "history-meta" }, [when].concat(detail.filter(Boolean)).join(" · "))
+      );
+      button.addEventListener("click", () => openCase(c.case_id));
+      return el("li", {}, button);
+    })
+  );
+  $("#history").hidden = data.cases.length === 0;
+}
+
+function openCase(id) {
+  remember(id);
+  caseData = null;
+  show("status-view");
+  $("#status-text").textContent = t("status_reading");
+  poll();
+}
+
 // --- Start ---------------------------------------------------------------------------
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -670,12 +819,24 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#failed-restart").addEventListener("click", discardAndReset);
   $("#new-bill").addEventListener("click", () => reset());
 
-  const saved = recalled();
-  if (saved) {
-    caseId = saved;
-    show("status-view");
-    poll();
-  } else {
-    show("upload-view");
-  }
+  $("#login-form").addEventListener("submit", onLogin);
+  $("#register-form").addEventListener("submit", onRegister);
+  $("#show-register").addEventListener("click", () => showAuth("", true));
+  $("#show-login").addEventListener("click", () => showAuth("", false));
+  $("#logout-button").addEventListener("click", onLogout);
+  $("#account-button").addEventListener("click", openAccount);
+  $("#account-back").addEventListener("click", () => reset());
+  $("#consent-form").addEventListener("submit", onConsent);
+  $("#password-form").addEventListener("submit", onChangePassword);
+  $("#delete-account-form").addEventListener("submit", onDeleteAccount);
+
+  api("GET", "/api/auth/session")
+    .then(({ user }) => {
+      if (!user) return showAuth("");
+      loggedIn(user);
+      const saved = recalled();
+      if (saved) openCase(saved);
+      else reset();
+    })
+    .catch(() => showAuth(""));
 });

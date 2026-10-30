@@ -15,12 +15,15 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, Optional
 
+from .explanation import PROMPT_VERSION as EXPLAIN_PROMPT
 from .explanation import explain
+from .extraction import PROMPT_VERSION as EXTRACT_PROMPT
 from .extraction import extract_bill, extract_eob, merge_eobs
 from .ingest import IngestError, ingest_many
 from .llm import JsonLLM, LLMUnavailable
 from .models import Bill, Eob
 from .reference import Reference, price_context
+from .research import research_record
 from .rules import run_rules
 from .store import CaseRow, Store, unpack_files
 
@@ -63,21 +66,21 @@ class CaseRunner:
         case = self.store.get_case(None, case_id)
         if case is None or case.status not in ("queued",):
             return
-        self._set(case_id, "extracting", bump=True)
+        self._set(case, "extracting", bump=True)
         try:
             self._process(case)
         except LLMUnavailable:
             if case.attempts + 1 >= MAX_ATTEMPTS:
-                self._set(case_id, "failed", "llm_unavailable")
+                self._set(case, "failed", "llm_unavailable")
             else:
-                self._set(case_id, "queued", "llm_unavailable")
+                self._set(case, "queued", "llm_unavailable")
                 self._schedule_retry(case_id)
         except IngestError as exc:
             self.store.put_result(case_id, _result(error_message=exc.message))
-            self._set(case_id, "failed", exc.code)
+            self._set(case, "failed", exc.code)
         except Exception as exc:  # never log the message: it may quote document data
             log.error("case %s failed with %s", case_id, type(exc).__name__)
-            self._set(case_id, "failed", "internal_error")
+            self._set(case, "failed", "internal_error")
 
     def _process(self, case: CaseRow) -> None:
         previous = self.store.get_result(case.case_id)
@@ -90,7 +93,7 @@ class CaseRunner:
         bill_res = extract_bill(ingest_many(self._files(case.bill_upload_id)), self.llm)
         if bill_res.data is None:
             self.store.put_result(case.case_id, _result(error_message=UNREADABLE_BILL, problems=bill_res.problems))
-            return self._set(case.case_id, "failed", "unreadable")
+            return self._set(case, "failed", "unreadable")
 
         eob, eob_status, warnings = None, "none", list(bill_res.warnings)
         if case.eob_upload_ids:
@@ -113,7 +116,7 @@ class CaseRunner:
         )
         if bill_res.status == "needs_confirmation":
             self.store.put_result(case.case_id, result)
-            return self._set(case.case_id, "needs_confirmation")
+            return self._set(case, "needs_confirmation")
         self._finish(case, bill_res.data, eob, result)
 
     def _finish(self, case: CaseRow, bill: Bill, eob: Optional[Eob], result: Dict[str, Any]) -> None:
@@ -134,17 +137,38 @@ class CaseRunner:
             },
         )
         self.store.put_result(case_id, result)
-        self._set(case_id, "ready")
+        self._collect_research(case, bill, eob, flags, result)
+        self._set(case, "ready")
+
+    def _collect_research(self, case: CaseRow, bill: Bill, eob: Optional[Eob], flags, result: Dict[str, Any]) -> None:
+        user = self.store.get_user(case.user_id)
+        if user is None or not user.research_consent:
+            self.store.delete_research(case.case_id)  # consent withdrawn since an earlier run
+            return
+        record = research_record(
+            bill,
+            eob,
+            flags,
+            eob_count=len(case.eob_upload_ids),
+            eob_status=result.get("eob_status", "none"),
+            language=case.language,
+            user_edited=bool(result.get("user_edited")),
+            model=getattr(self.llm, "model", None),
+            prompt_versions={"extract": EXTRACT_PROMPT, "explain": EXPLAIN_PROMPT},
+        )
+        self.store.put_research(case.case_id, record)
 
     def _files(self, upload_id: str):
-        data = self.store.get_blob(upload_id)
+        data = self.store.get_upload_data(upload_id)
         if data is None:
             raise IngestError("expired", "This upload has expired. Please upload the file again.")
         return unpack_files(data)
 
-    def _set(self, case_id: str, status: str, error_code: Optional[str] = None, bump: bool = False) -> None:
-        self.store.set_status(case_id, status, error_code, bump_attempts=bump)
-        log.info("case %s status=%s%s", case_id, status, " error=" + error_code if error_code else "")
+    def _set(self, case: CaseRow, status: str, error_code: Optional[str] = None, bump: bool = False) -> None:
+        self.store.set_status(case.case_id, status, error_code, bump_attempts=bump)
+        log.info("case %s status=%s%s", case.case_id, status, " error=" + error_code if error_code else "")
+        if status in ("ready", "failed", "needs_confirmation"):
+            self.store.record_event("case_" + status, case.user_id, **({"error": error_code} if error_code else {}))
 
     def _schedule_retry(self, case_id: str) -> None:
         if self.inline:

@@ -1,16 +1,13 @@
-import base64
 import os
 from datetime import datetime, timedelta, timezone
 
+import psycopg
 import pytest
 from cryptography.exceptions import InvalidTag
 
-import sqlite3
-
-from billchecker.store import Store, hash_session, load_key, new_id, pack_files, unpack_files
+from billchecker.store import EmailTaken, Store, hash_token, load_key, pack_files, unpack_files
 
 KEY = os.urandom(32)
-S1, S2 = hash_session("session-one"), hash_session("session-two")
 SECRET = b"Complete blood count $40.00 account 00098765432"
 
 
@@ -31,125 +28,211 @@ def clock():
 
 
 @pytest.fixture
-def store(tmp_path, clock):
-    s = Store(tmp_path / "data", KEY, now=clock)
+def store(pg_dsn, clock):
+    s = Store(pg_dsn, KEY, now=clock)
     yield s
     s.close()
 
 
-def test_blob_round_trip_and_ciphertext_on_disk(store):
-    up = store.add_upload(S1, "bill", "application/pdf", 1, SECRET)
-    assert store.get_blob(up.upload_id) == SECRET
-    on_disk = (store.blobs / up.upload_id).read_bytes()
-    assert SECRET not in on_disk and b"00098765432" not in on_disk
+@pytest.fixture
+def alice(store):
+    return store.create_user("Alice@Example.com", "hash-a", research_consent=True)
 
 
-def test_tampered_blob_fails_to_decrypt(store):
-    up = store.add_upload(S1, "bill", "application/pdf", 1, SECRET)
-    path = store.blobs / up.upload_id
-    raw = bytearray(path.read_bytes())
-    raw[-1] ^= 1
-    path.write_bytes(bytes(raw))
+@pytest.fixture
+def bob(store):
+    return store.create_user("bob@example.com", "hash-b", research_consent=False)
+
+
+def raw(store, sql, args=()):
+    with store.pool.connection() as conn:
+        cur = conn.execute(sql, args)
+        return cur.fetchall() if cur.description else []
+
+
+# --- Users and sessions -------------------------------------------------------------------
+
+
+def test_users_are_unique_by_lowercased_email(store, alice):
+    assert alice.email == "alice@example.com"
+    assert store.get_user_by_email("ALICE@example.com").user_id == alice.user_id
+    with pytest.raises(EmailTaken):
+        store.create_user("alice@EXAMPLE.com", "x", False)
+
+
+def test_sessions_stored_as_hashes_and_expire(store, alice, clock):
+    token = store.create_session(alice.user_id)
+    assert store.session_user(token).user_id == alice.user_id
+    assert raw(store, "SELECT token_hash FROM sessions") == [(hash_token(token),)]
+    clock.advance(days=14, seconds=1)
+    assert store.session_user(token) is None
+    assert store.cleanup()["sessions_deleted"] == 1
+
+
+def test_delete_sessions_keeps_current(store, alice):
+    a, b = store.create_session(alice.user_id), store.create_session(alice.user_id)
+    store.delete_sessions(alice.user_id, keep_token=a)
+    assert store.session_user(a) is not None and store.session_user(b) is None
+
+
+def test_lockout_after_ten_failures(store, alice, clock):
+    for _ in range(9):
+        store.record_login(alice.user_id, success=False)
+    assert not store.is_locked(store.get_user(alice.user_id))
+    store.record_login(alice.user_id, success=False)
+    assert store.is_locked(store.get_user(alice.user_id))
+    clock.advance(minutes=16)
+    assert not store.is_locked(store.get_user(alice.user_id))
+    store.record_login(alice.user_id, success=True)
+    assert store.get_user(alice.user_id).failed_logins == 0
+
+
+# --- Encryption at rest ----------------------------------------------------------------
+
+
+def test_files_and_results_are_encrypted_in_the_database(store, alice):
+    up = store.add_upload(alice.user_id, "bill", "application/pdf", 1, SECRET)
+    case = store.add_case(alice.user_id, up.upload_id, [])
+    store.put_result(case.case_id, {"bill": {"provider_name": "Riverside Medical Group"}})
+    assert store.get_upload_data(up.upload_id) == SECRET
+    assert store.get_result(case.case_id)["bill"]["provider_name"] == "Riverside Medical Group"
+    [(data,)] = raw(store, "SELECT data FROM uploads")
+    [(result,)] = raw(store, "SELECT result FROM cases")
+    assert SECRET not in bytes(data) and b"Riverside" not in bytes(result)
+
+
+def test_encrypted_value_cannot_be_moved_to_another_row(store, alice):
+    a = store.add_upload(alice.user_id, "bill", "application/pdf", 1, SECRET)
+    b = store.add_upload(alice.user_id, "bill", "application/pdf", 1, b"other")
+    raw(store, "UPDATE uploads SET data = (SELECT data FROM uploads WHERE upload_id = %s) WHERE upload_id = %s", (a.upload_id, b.upload_id))
     with pytest.raises(InvalidTag):
-        store.get_blob(up.upload_id)
+        store.get_upload_data(b.upload_id)
 
 
-def test_blob_cannot_be_swapped_under_another_id(store):
-    a = store.add_upload(S1, "bill", "application/pdf", 1, SECRET)
-    b = store.add_upload(S1, "bill", "application/pdf", 1, b"other")
-    (store.blobs / b.upload_id).write_bytes((store.blobs / a.upload_id).read_bytes())
-    with pytest.raises(InvalidTag):
-        store.get_blob(b.upload_id)
+def test_wrong_key_cannot_read(pg_dsn, store, alice, clock):
+    up = store.add_upload(alice.user_id, "bill", "application/pdf", 1, SECRET)
+    other = Store(pg_dsn, os.urandom(32), now=clock)
+    try:
+        with pytest.raises(InvalidTag):
+            other.get_upload_data(up.upload_id)
+    finally:
+        other.close()
 
 
-def test_wrong_key_cannot_read(tmp_path, clock):
-    s1 = Store(tmp_path / "d", KEY, now=clock)
-    up = s1.add_upload(S1, "bill", "application/pdf", 1, SECRET)
-    s2 = Store(tmp_path / "d", os.urandom(32), now=clock)
-    with pytest.raises(InvalidTag):
-        s2.get_blob(up.upload_id)
+# --- Ownership --------------------------------------------------------------------------
 
 
-def test_index_holds_no_document_content(store):
-    up = store.add_upload(S1, "bill", "application/pdf", 1, SECRET)
-    case = store.add_case(S1, up.upload_id, [])
-    store.put_result(case.case_id, {"bill": {"line": "Complete blood count", "charge": "40.00"}})
-    index = (store.root / "index.sqlite3").read_bytes()
-    assert b"Complete blood" not in index and b"40.00" not in index and b"session-one" not in index
+def test_users_cannot_see_each_others_data(store, alice, bob):
+    up = store.add_upload(alice.user_id, "bill", "application/pdf", 1, SECRET)
+    case = store.add_case(alice.user_id, up.upload_id, [])
+    assert store.get_upload(bob.user_id, up.upload_id) is None
+    assert store.get_case(bob.user_id, case.case_id) is None
+    assert store.list_cases(bob.user_id) == []
+    assert store.delete_case(bob.user_id, case.case_id) is False
+    assert [c.case_id for c in store.list_cases(alice.user_id)] == [case.case_id]
 
 
-def test_sessions_cannot_see_each_others_data(store):
-    up = store.add_upload(S1, "bill", "application/pdf", 1, SECRET)
-    case = store.add_case(S1, up.upload_id, [])
-    assert store.get_upload(S2, up.upload_id) is None
-    assert store.get_case(S2, case.case_id) is None
-    assert store.delete_case(S2, case.case_id) is False
-    assert store.get_case(S1, case.case_id) is not None
+def test_bad_ids_return_nothing(store, alice):
+    assert store.get_case(alice.user_id, "../etc") is None
+    assert store.get_upload(alice.user_id, "x" * 32) is None
 
 
-def test_status_updates_and_attempts(store):
-    up = store.add_upload(S1, "bill", "application/pdf", 1, SECRET)
-    case = store.add_case(S1, up.upload_id, [])
-    store.set_status(case.case_id, "extracting", bump_attempts=True)
-    store.set_status(case.case_id, "queued", "llm_unavailable")
-    got = store.get_case(None, case.case_id)
-    assert (got.status, got.error_code, got.attempts) == ("queued", "llm_unavailable", 1)
+# --- Retention ---------------------------------------------------------------------------
 
 
-def test_delete_case_removes_case_and_upload_blobs(store):
-    bill = store.add_upload(S1, "bill", "application/pdf", 1, SECRET)
-    eob = store.add_upload(S1, "eob", "application/pdf", 1, b"eob")
-    case = store.add_case(S1, bill.upload_id, [eob.upload_id])
+def test_files_purged_after_24h_cases_kept_90_days(store, alice, clock):
+    up = store.add_upload(alice.user_id, "bill", "application/pdf", 1, SECRET)
+    case = store.add_case(alice.user_id, up.upload_id, [])
     store.put_result(case.case_id, {"x": 1})
-    assert store.delete_case(S1, case.case_id)
-    assert list(store.blobs.iterdir()) == []
-    assert store.get_upload(S1, bill.upload_id) is None
+    clock.advance(hours=24, seconds=1)
+    assert store.cleanup()["files_purged"] == 1
+    assert store.get_upload_data(up.upload_id) is None
+    assert raw(store, "SELECT data FROM uploads") == [(None,)]
+    assert store.get_result(case.case_id) == {"x": 1}  # results still there
+    clock.advance(days=88, hours=23)  # 89 days 23 hours after creation
+    assert store.get_case(alice.user_id, case.case_id) is not None
+    clock.advance(hours=2)
+    assert store.get_case(alice.user_id, case.case_id) is None
+    counts = store.cleanup()
+    assert counts["cases_deleted"] == 1 and counts["uploads_deleted"] == 1
+    assert raw(store, "SELECT count(*) FROM cases") == [(0,)]
 
 
-def test_everything_expires_after_24_hours(store, clock):
-    up = store.add_upload(S1, "bill", "application/pdf", 1, SECRET)
-    case = store.add_case(S1, up.upload_id, [])
-    store.put_result(case.case_id, {"x": 1})
-    clock.advance(hours=23, minutes=59)
-    assert store.get_case(S1, case.case_id) is not None
-    assert store.cleanup() == 0
-    clock.advance(minutes=2)
-    assert store.get_case(S1, case.case_id) is None
-    assert store.get_upload(S1, up.upload_id) is None
-    assert store.cleanup() == 2
-    assert list(store.blobs.iterdir()) == []
+def test_upload_never_used_is_deleted_after_24h(store, alice, clock):
+    store.add_upload(alice.user_id, "bill", "application/pdf", 1, SECRET)
+    clock.advance(hours=25)
+    assert store.cleanup()["uploads_deleted"] == 1
 
 
-def test_upload_lives_as_long_as_its_case(store, clock):
-    up = store.add_upload(S1, "bill", "application/pdf", 1, SECRET)
-    clock.advance(hours=12)
-    case = store.add_case(S1, up.upload_id, [])
-    clock.advance(hours=13)  # 25h after upload, 13h after case creation
-    store.cleanup()
-    assert store.get_blob(up.upload_id) == SECRET
-    assert store.get_case(S1, case.case_id) is not None
+def test_delete_case_removes_uploads_and_research(store, alice):
+    bill = store.add_upload(alice.user_id, "bill", "application/pdf", 1, SECRET)
+    eob = store.add_upload(alice.user_id, "eob", "application/pdf", 1, b"eob")
+    case = store.add_case(alice.user_id, bill.upload_id, [eob.upload_id])
+    store.put_research(case.case_id, {"flags": []})
+    assert store.delete_case(alice.user_id, case.case_id)
+    assert raw(store, "SELECT count(*) FROM uploads") == [(0,)]
+    assert store.research_rows() == []
 
 
-def test_cleanup_removes_old_orphans_but_not_fresh_ones(store, clock):
-    old, fresh = store.blobs / new_id(), store.blobs / new_id()
-    old.write_bytes(b"x")
-    fresh.write_bytes(b"y")
-    past = (clock() - timedelta(minutes=30)).timestamp()
-    os.utime(old, (past, past))
-    store.cleanup()
-    assert not old.exists() and fresh.exists()
+def test_delete_user_removes_everything_but_keeps_unlinked_counts(store, alice, bob):
+    up = store.add_upload(alice.user_id, "bill", "application/pdf", 1, SECRET)
+    case = store.add_case(alice.user_id, up.upload_id, [])
+    store.put_research(case.case_id, {"flags": []})
+    store.create_session(alice.user_id)
+    store.record_event("upload", alice.user_id)
+    store.record_event("upload", bob.user_id)
+    store.delete_user(alice.user_id)
+    for table in ("users", "sessions", "uploads", "cases", "research_cases"):
+        n = raw(store, "SELECT count(*) FROM {} ".format(table) + ("WHERE user_id = %s" if table in ("users", "sessions", "uploads", "cases") else ""),
+                (alice.user_id,) if table != "research_cases" else ())
+        assert n == [(0,)], table
+    assert store.event_counts() == {"upload": 2}
+    assert raw(store, "SELECT count(*) FROM events WHERE user_key IS NULL") == [(1,)]
 
 
-def test_bad_blob_ids_rejected(store):
-    with pytest.raises(ValueError):
-        store.get_blob("../index.sqlite3")
+# --- Collected data ------------------------------------------------------------------------
 
 
-def test_load_key():
-    assert load_key(base64.b64encode(KEY).decode()) == KEY
-    for bad in (None, "", base64.b64encode(b"short").decode()):
-        with pytest.raises(ValueError):
-            load_key(bad)
+def test_collected_data_has_no_ids_or_content(store, alice):
+    up = store.add_upload(alice.user_id, "bill", "application/pdf", 1, SECRET)
+    case = store.add_case(alice.user_id, up.upload_id, [])
+    store.record_flag_feedback(case.case_id, "duplicate_line:bill.L2,bill.L3", "duplicate_line", "medium", "correct", "m")
+    store.record_survey(case.case_id, 4, "letter", 1, False)
+    store.put_research(case.case_id, {"flags": [{"rule": "duplicate_line"}]})
+    store.record_event("upload", alice.user_id, kind="bill")
+    dump = repr(raw(store, "SELECT * FROM flag_feedback") + raw(store, "SELECT * FROM survey")
+                + raw(store, "SELECT * FROM research_cases") + raw(store, "SELECT * FROM events"))
+    for leak in (case.case_id, alice.user_id, "alice", "bill.L2"):
+        assert leak not in dump
+    # Feedback and research join through the same one-way key.
+    [fb] = store.feedback_rows()["flags"]
+    [rs] = store.research_rows()
+    assert fb["research_id"] == rs["research_id"] and rs["month"] == "2026-04"
+
+
+def test_feedback_upserts(store, alice):
+    up = store.add_upload(alice.user_id, "bill", "application/pdf", 1, SECRET)
+    case = store.add_case(alice.user_id, up.upload_id, [])
+    store.record_flag_feedback(case.case_id, "f1", "duplicate_line", "medium", "incorrect", None)
+    store.record_flag_feedback(case.case_id, "f1", "duplicate_line", "medium", "correct", None)
+    assert [r["verdict"] for r in store.feedback_rows()["flags"]] == ["correct"]
+
+
+def test_event_counts_since(store, alice, clock):
+    store.record_event("login", alice.user_id)
+    clock.advance(days=2)
+    store.record_event("login", alice.user_id)
+    assert store.event_counts() == {"login": 2}
+    assert store.event_counts(since=clock() - timedelta(days=1)) == {"login": 1}
+
+
+def test_migrations_are_idempotent(pg_dsn, store, clock):
+    again = Store(pg_dsn, KEY, now=clock)
+    again.close()
+    assert raw(store, "SELECT version FROM schema_migrations") == [(1,)]
+
+
+# --- Helpers ----------------------------------------------------------------------------
 
 
 def test_pack_unpack_files():
@@ -158,22 +241,10 @@ def test_pack_unpack_files():
     assert unpack_files(b"%PDF-plain single file") == [b"%PDF-plain single file"]
 
 
-def test_case_with_several_eobs(store):
-    bill = store.add_upload(S1, "bill", "application/pdf", 1, SECRET)
-    eobs = [store.add_upload(S1, "eob", "application/pdf", 1, b"e%d" % i) for i in range(3)]
-    case = store.add_case(S1, bill.upload_id, [e.upload_id for e in eobs])
-    assert store.get_case(S1, case.case_id).eob_upload_ids == [e.upload_id for e in eobs]
-    store.delete_case(S1, case.case_id)
-    assert list(store.blobs.iterdir()) == []
+def test_load_key():
+    import base64
 
-
-def test_old_index_is_replaced(tmp_path, clock):
-    root = tmp_path / "old"
-    root.mkdir()
-    db = sqlite3.connect(str(root / "index.sqlite3"))
-    db.execute("CREATE TABLE cases (case_id TEXT, eob_upload_id TEXT)")
-    db.commit()
-    db.close()
-    s = Store(root, KEY, now=clock)
-    up = s.add_upload(S1, "bill", "application/pdf", 1, SECRET)
-    assert s.add_case(S1, up.upload_id, []).eob_upload_ids == []
+    assert load_key(base64.b64encode(KEY).decode()) == KEY
+    for bad in (None, "", base64.b64encode(b"short").decode()):
+        with pytest.raises(ValueError):
+            load_key(bad)

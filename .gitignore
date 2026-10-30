@@ -6,3 +6,5 @@ fixtures/
 
 # Real deployment secrets
 deploy/.env
+.pgdata/
+.env.dev
