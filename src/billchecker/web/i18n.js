@@ -41,6 +41,12 @@ const STATIC_ES = {
   delete_account_detail: "Esto borra su cuenta y todas sus facturas y resultados de inmediato. No se puede deshacer.",
   back: "Volver",
   history_title: "Mis facturas",
+  ask_title: "Haga una pregunta",
+  ask_intro: "Pregunte sobre esta factura, el estado de cuenta de su seguro o sus derechos. Las respuestas vienen de nuestras guías y de su factura, con fuentes.",
+  ask_label: "Su pregunta",
+  ask_button: "Preguntar",
+  ask_sources: "Fuentes",
+  ask_disclaimer: "Información general, no es asesoría legal, médica ni financiera. Las reglas pueden variar según el plan y el estado.",
   checking_title: "Revisando su factura",
   cancel_delete: "Cancelar y borrar",
   confirm_title: "Por favor confirme dos cantidades",
@@ -204,6 +210,10 @@ const STRINGS = {
     account_deleted: "Your account and all your data have been deleted.",
     logged_out: "You have been logged out.",
     session_expired: "Please log in again.",
+    ask_examples: ["Why does my bill not match my EOB?", "How do I appeal a denied claim?", "Can I get financial assistance?"],
+    asking: "Looking through our guides…",
+    ask_related: "Related guides",
+    err_question: "Please type a question.",
   },
   es: {
     lang_toggle: "English",
@@ -295,6 +305,10 @@ const STRINGS = {
     account_deleted: "Su cuenta y todos sus datos fueron borrados.",
     logged_out: "Cerró la sesión.",
     session_expired: "Por favor inicie sesión otra vez.",
+    ask_examples: ["¿Por qué mi factura no coincide con mi EOB?", "¿Cómo apelo una reclamación negada?", "¿Puedo recibir ayuda financiera?"],
+    asking: "Buscando en nuestras guías…",
+    ask_related: "Guías relacionadas",
+    err_question: "Escriba una pregunta.",
   },
 };
 
@@ -322,6 +336,7 @@ const SERVER_ERRORS_ES = {
   weak_password: "Use una contraseña de al menos 10 caracteres que no contenga su email.",
   email_taken: "Ya existe una cuenta con este email. Pruebe a iniciar sesión.",
   bad_origin: "Solicitud rechazada.",
+  invalid_question: "Haga una pregunta más corta.",
 };
 
 const GLOSSARY = {

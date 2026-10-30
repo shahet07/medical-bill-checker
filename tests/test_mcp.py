@@ -54,7 +54,7 @@ async def test_lists_tools_resources_and_prompt():
     server, _ = server_with()
     async with Client(server) as client:
         tools = {t.name: t for t in (await client.list_tools()).tools}
-        assert set(tools) == {"check_bill", "check_extracted_bill", "create_letter"}
+        assert set(tools) == {"check_bill", "check_extracted_bill", "create_letter", "search_guides"}
         assert tools["check_extracted_bill"].annotations.read_only_hint is True
         assert tools["create_letter"].annotations.read_only_hint is False
         uris = {str(r.uri) for r in (await client.list_resources()).resources}
@@ -190,3 +190,18 @@ async def test_pdf_path_safety(tmp_path):
     existing.write_bytes(b"mine")
     assert "already exists" in error_text(await call(server, "create_letter", pdf_path=str(existing), **args))
     assert existing.read_bytes() == b"mine"
+
+
+# --- search_guides (RAG) ----------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_search_guides_returns_sourced_passages():
+    from billchecker.rag import KnowledgeBase
+
+    server = build_server(llm_factory=lambda: None, knowledge=KnowledgeBase())
+    out = data(await call(server, "search_guides", query="How long do I have to file an appeal?", limit=3))
+    assert out["search_mode"] == "keyword" and len(out["passages"]) == 3
+    top = out["passages"][0]
+    assert "appeal" in top["title"].lower() and top["source_url"].startswith("https://")
+    assert "search query" in error_text(await call(server, "search_guides", query="  "))

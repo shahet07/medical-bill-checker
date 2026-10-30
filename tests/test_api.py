@@ -587,3 +587,36 @@ def test_reference_data_reaches_results(pg_dsn, llm, clock):
         got = c.get("/api/cases/" + case_id).json()
     assert [f["rule"] for f in got["flags"]] == ["unbundled_pair"]
     assert got["price_context"] == {"L1": {"reference_price": "92.50"}} and got["prices_label"] == "Test rate"
+
+
+# --- Questions (RAG) ----------------------------------------------------------------------------
+
+
+def test_ask_with_and_without_a_bill(client, llm):
+    from billchecker.rag import ANSWER_SCHEMA
+
+    case_id = start_case(client, llm, "denial")
+    original = llm.generate
+
+    def generate(system, content, schema):
+        # RoutingLLM only knows the extraction/explanation schemas; answer questions here.
+        if schema is ANSWER_SCHEMA:
+            answer = {"can_answer": True, "answer": "An EOB is a statement from your insurer. It is not a bill.", "citations": ["S1"]}
+            return LLMResponse(text=json.dumps(answer), stop_reason="end_turn")
+        return original(system, content, schema)
+
+    llm.generate = generate
+    r = client.post("/api/ask", json={"question": "What is an EOB?"})
+    assert r.status_code == 200 and r.json()["fallback"] is False
+    assert r.json()["sources"][0]["source_url"].startswith("https://")
+    r = client.post("/api/ask", json={"question": "Why does my bill not match?", "case_id": case_id, "language": "es"})
+    assert r.status_code == 200
+    assert client.post("/api/ask", json={"question": "x" * 501}).status_code == 422
+    assert client.post("/api/ask", json={"question": "hi", "case_id": "0" * 32}).status_code == 404
+    assert other_user(client).post("/api/ask", json={"question": "hi", "case_id": case_id}).status_code == 404
+    events = db_dump(client, "events")
+    assert "What is an EOB" not in events and "question_asked" in events
+
+
+def test_ask_requires_login(client):
+    assert TestClient(client.app).post("/api/ask", json={"question": "What is an EOB?"}).status_code == 401

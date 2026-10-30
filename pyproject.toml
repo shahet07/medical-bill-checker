@@ -36,7 +36,7 @@ dev = [
 billchecker-mcp = "billchecker.mcp_server:main"
 
 [tool.setuptools.package-data]
-billchecker = ["web/*"]
+billchecker = ["web/*", "knowledge/*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "tests"]

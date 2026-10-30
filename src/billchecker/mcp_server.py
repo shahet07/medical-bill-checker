@@ -8,6 +8,8 @@ stored: no database, no accounts. Tools:
                         (no LLM, no network, no API key)
 - create_letter         write any of the five letters; flags are recomputed from the data,
                         so an assistant cannot add flags that the checks did not raise
+- search_guides         retrieve passages from plain-language guides on billing rights
+                        (EOBs, appeals, surprise bills, financial assistance, ...) to ground answers
 
 Run:  billchecker-mcp     (or: python -m billchecker.mcp_server)
 """
@@ -32,6 +34,7 @@ from .letters import Patient, dispute, financial_assistance, insurer_appeal, ite
 from .letters_pdf import render_pdf
 from .llm import JsonLLM, LLMUnavailable, make_llm
 from .models import Bill, Eob, Flag
+from .rag import GeminiEmbedder, KnowledgeBase
 from .rules import run_rules
 
 INSTRUCTIONS = """Tools for checking US medical bills against insurance Explanations of Benefits (EOBs).
@@ -42,7 +45,9 @@ INSTRUCTIONS = """Tools for checking US medical bills against insurance Explanat
 - Prefer check_bill when the user gives file paths. If no LLM provider is configured for this server,
   read the documents yourself, fill in the bill/EOB schemas (resources billchecker://schema/bill and
   billchecker://schema/eob), and call check_extracted_bill.
-- Letters are in English for US billing offices and insurers."""
+- Letters are in English for US billing offices and insurers.
+- For questions about rights, appeals, deadlines, or terms, call search_guides and base the answer on the
+  passages it returns, naming their sources. Say when the guides don't cover something."""
 
 LetterKind = Literal["dispute", "itemized_request", "financial_assistance", "payment_plan", "insurer_appeal"]
 
@@ -66,6 +71,19 @@ class BillCheck(BaseModel):
 class FlagCheck(BaseModel):
     flag_count: int
     flags: List[Dict[str, Any]] = Field(description="Things worth asking about, each with evidence; not confirmed errors")
+
+
+class GuidePassage(BaseModel):
+    title: str
+    section: str
+    text: str
+    source_name: str
+    source_url: str
+
+
+class GuideResults(BaseModel):
+    search_mode: Literal["keyword", "hybrid"]
+    passages: List[GuidePassage]
 
 
 class LetterOut(BaseModel):
@@ -114,9 +132,16 @@ def _explanations_out(expl) -> Explanations:
 # --- Server -------------------------------------------------------------------------------
 
 
+def _default_knowledge() -> KnowledgeBase:
+    import os
+
+    return KnowledgeBase.from_env(embedder=GeminiEmbedder() if os.environ.get("GEMINI_API_KEY") else None)
+
+
 def build_server(
     llm_factory: Callable[[], JsonLLM] = make_llm,
     today: Callable[[], date] = date.today,
+    knowledge: Optional[KnowledgeBase] = None,
 ) -> MCPServer:
     server = MCPServer(
         name="billchecker",
@@ -276,6 +301,32 @@ def build_server(
             path.write_bytes(render_pdf(letter))
             out.pdf_path = str(path)
         return out
+
+    kb_holder: Dict[str, KnowledgeBase] = {}
+
+    @server.tool(
+        title="Search billing guides",
+        annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False),
+    )
+    def search_guides(query: str, limit: int = 4) -> GuideResults:
+        """Search plain-language guides about medical billing rights: reading EOBs, itemized bills, common
+        errors, denied claims and appeals (with deadlines), the No Surprises Act, good faith estimates,
+        financial assistance, payment plans, network status, codes, records, and medical debt.
+        Each passage names the official source it is based on. Works in English or Spanish."""
+        if not query.strip():
+            raise ToolError("Give a search query.")
+        if "kb" not in kb_holder:
+            kb_holder["kb"] = knowledge or _default_knowledge()
+        kb = kb_holder["kb"]
+        hits = kb.search(query[:500], k=max(1, min(limit, 8)))
+        return GuideResults(
+            search_mode=kb.mode,
+            passages=[
+                GuidePassage(title=h.passage.title, section=h.passage.section, text=h.passage.text,
+                             source_name=h.passage.source_name, source_url=h.passage.source_url)
+                for h in hits
+            ],
+        )
 
     @server.resource("billchecker://schema/bill", name="bill_schema", title="Bill data format", mime_type="application/json")
     def bill_schema() -> str:

@@ -181,6 +181,23 @@
         <div id="flags"></div>
       </div>
 
+      <div class="card" id="ask-card">
+        <h2 data-i18n="ask_title">Ask a question</h2>
+        <p class="muted" data-i18n="ask_intro">Ask about this bill, your insurance statement, or your rights. Answers come from our guides and your bill, with sources.</p>
+        <div id="ask-examples" class="examples"></div>
+        <form id="ask-form" novalidate>
+          <label for="ask-input" data-i18n="ask_label">Your question</label>
+          <textarea id="ask-input" rows="2" maxlength="500"></textarea>
+          <button type="submit" class="primary" data-i18n="ask_button">Ask</button>
+        </form>
+        <div id="ask-answer" hidden>
+          <p id="ask-text" class="answer" aria-live="polite"></p>
+          <h3 id="ask-sources-title" data-i18n="ask_sources">Sources</h3>
+          <ul id="ask-sources" class="sources"></ul>
+          <p class="hint" data-i18n="ask_disclaimer">General information, not legal, medical, or financial advice. Rules can differ by plan and state.</p>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-head">
           <h2 data-i18n="lines_title">What's on your bill</h2>

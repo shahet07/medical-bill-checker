@@ -48,6 +48,7 @@ from .letters_pdf import render_pdf
 from .llm import JsonLLM, make_llm
 from .models import Bill, Eob, Flag, Money
 from .pipeline import CaseRunner
+from .rag import MAX_QUESTION_CHARS, GeminiEmbedder, KnowledgeBase, answer_question
 from .reference import Reference, load_pairs, load_prices
 from .store import Store, UserRow, load_key, pack_files
 
@@ -72,6 +73,7 @@ DEFAULT_LIMITS = {
     "login": (20, 900),
     "register": (5, 3600),
     "account": (10, 3600),
+    "ask": (30, 3600),
 }
 
 
@@ -81,6 +83,7 @@ class Settings:
     key: bytes
     llm: JsonLLM
     reference: Reference = field(default_factory=Reference)
+    knowledge: Optional[KnowledgeBase] = None  # default: keyword search over the bundled guides
     secure_cookies: bool = True
     inline_jobs: bool = False
     cleanup_interval: Optional[float] = 3600.0  # seconds; None disables the background sweep
@@ -221,6 +224,12 @@ class Survey(_Body):
     most_useful: Literal["explanation", "letter", "both", "neither"]
 
 
+class Question(_Body):
+    question: str = Field(min_length=1, max_length=MAX_QUESTION_CHARS)
+    case_id: Optional[str] = None  # answer with this bill's data in mind
+    language: Literal["en", "es"] = "en"
+
+
 class LanguageChange(_Body):
     language: Literal["en", "es"]
 
@@ -265,6 +274,7 @@ class RateLimiter:
 def create_app(settings: Settings) -> FastAPI:
     store = Store(settings.database_url, settings.key, now=settings.now)
     runner = CaseRunner(store, settings.llm, inline=settings.inline_jobs, reference=settings.reference)
+    knowledge = settings.knowledge or KnowledgeBase()
     limiter = RateLimiter(settings.limits)
 
     @asynccontextmanager
@@ -634,6 +644,36 @@ def create_app(settings: Settings) -> FastAPI:
         store.record_event("survey", user.user_id)
         return Response(status_code=204)
 
+    @app.post("/api/ask")
+    def ask(body: Question, user: UserRow = Depends(current_user)):
+        """Answer a billing question from the bundled guides (and the user's bill, if case_id is given).
+        The question is never stored or logged."""
+        limiter.check(user.user_id, "ask")
+        bill = eob = None
+        flags: List[Flag] = []
+        if body.case_id:
+            case, result = ready_result(body.case_id, user.user_id)
+            bill = Bill.model_validate(result["bill"])
+            eob = Eob.model_validate(result["eob"]) if result.get("eob") else None
+            flags = [Flag.model_validate(f) for f in result["flags"]]
+        try:
+            ans = answer_question(body.question, knowledge, settings.llm, bill=bill, eob=eob, flags=flags, language=body.language)
+        except ValueError:
+            raise _error(422, "invalid_question", "Please ask a shorter question.")
+        if ans.reason:
+            log.info("ask fallback %s", ans.reason)
+        store.record_event("question_asked", user.user_id, with_bill=bool(body.case_id), answered=not ans.fallback)
+
+        def src(s):
+            return {"title": s.title, "section": s.section, "source_name": s.source_name, "source_url": s.source_url}
+
+        return {
+            "answer": ans.text,
+            "fallback": ans.fallback,
+            "sources": [src(s) for s in ans.sources],
+            "related": [src(s) for s in ans.related],
+        }
+
     @app.delete("/api/cases/{case_id}", status_code=204)
     def delete_case(case_id: str, user: UserRow = Depends(current_user)):
         if not store.delete_case(user.user_id, case_id):
@@ -661,6 +701,7 @@ def app_from_env() -> FastAPI:
             key=load_key(os.environ.get("BILLCHECKER_KEY")),
             llm=make_llm(),
             reference=reference,
+            knowledge=KnowledgeBase.from_env(embedder=GeminiEmbedder() if os.environ.get("GEMINI_API_KEY") else None),
             secure_cookies=os.environ.get("BILLCHECKER_INSECURE_COOKIES") != "1",
         )
     )

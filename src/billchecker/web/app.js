@@ -261,6 +261,7 @@ function renderResults(c) {
 
   renderFlags(c);
   renderLines(c);
+  renderAskExamples();
   setupLetterForm(c);
   show("results-view");
 }
@@ -452,6 +453,59 @@ function renderGlossary() {
   $("#glossary").replaceChildren(...GLOSSARY[LANG].flatMap(([term, def]) => [el("dt", {}, term), el("dd", {}, def)]));
 }
 
+// --- Questions ------------------------------------------------------------------------
+
+function renderAskExamples() {
+  $("#ask-examples").replaceChildren(
+    ...t("ask_examples").map((q) => {
+      const b = el("button", { type: "button", class: "small" }, q);
+      b.addEventListener("click", () => {
+        $("#ask-input").value = q;
+        onAsk();
+      });
+      return b;
+    })
+  );
+}
+
+function sourceItem(s) {
+  const safe = /^https:\/\//.test(s.source_url || "");
+  return el(
+    "li",
+    {},
+    el("span", { class: "source-title" }, s.title + " — " + s.section),
+    s.source_name
+      ? el("span", { class: "source-from" }, " · ", safe ? el("a", { href: s.source_url, target: "_blank", rel: "noopener noreferrer" }, s.source_name) : s.source_name)
+      : null
+  );
+}
+
+async function onAsk(event) {
+  if (event) event.preventDefault();
+  showError("");
+  const question = $("#ask-input").value.trim();
+  if (!question) return showError(t("err_question"));
+  const button = $("#ask-form button[type=submit]");
+  button.disabled = true;
+  $("#ask-answer").hidden = false;
+  $("#ask-text").textContent = t("asking");
+  $("#ask-sources").replaceChildren();
+  $("#ask-sources-title").hidden = true;
+  try {
+    const res = await api("POST", "/api/ask", { question, case_id: caseId, language: LANG });
+    $("#ask-text").textContent = res.answer;
+    const list = res.fallback ? res.related : res.sources;
+    $("#ask-sources-title").textContent = res.fallback ? t("ask_related") : LANG === "es" ? STATIC_ES.ask_sources : "Sources";
+    $("#ask-sources-title").hidden = list.length === 0;
+    $("#ask-sources").replaceChildren(...list.map(sourceItem));
+  } catch (e) {
+    $("#ask-answer").hidden = true;
+    showError(e.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+
 // --- Letter --------------------------------------------------------------------------
 
 function hasDenials(c) {
@@ -587,6 +641,8 @@ function reset(message) {
   $("#add-eob").hidden = false;
   $("#letter-form").reset();
   $("#survey-form").reset();
+  $("#ask-form").reset();
+  $("#ask-answer").hidden = true;
   $("#survey-thanks").hidden = true;
   showError(message || "");
   show("upload-view");
@@ -806,6 +862,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#edit-cancel").addEventListener("click", closeEditor);
   $("#add-line").addEventListener("click", () => $("#edit-rows").append(editRow({})));
   $("#edit-form").addEventListener("submit", onSaveEdit);
+  $("#ask-form").addEventListener("submit", onAsk);
   $("#lang-toggle").addEventListener("click", () => applyLanguage(LANG === "es" ? "en" : "es"));
   applyLanguage(initialLanguage());
   document.querySelectorAll('input[name="kind"]').forEach((r) => r.addEventListener("change", onKindChange));

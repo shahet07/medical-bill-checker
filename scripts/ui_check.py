@@ -59,6 +59,13 @@ with sync_playwright() as p:
     print("flags:", page.locator(".flag h3").all_inner_texts())
     page.screenshot(path=str(OUT / "1_results.png"), full_page=True)
 
+    # 1b. Ask a question (RAG) using an example button
+    page.locator("#ask-examples button").nth(1).click()
+    page.wait_for_function("() => { const t = document.querySelector('#ask-text'); return t && t.textContent && !t.textContent.startsWith('Looking'); }", timeout=120000)
+    print("answer:", page.inner_text("#ask-text")[:110].replace("\n", " "))
+    print("answer sources:", page.locator("#ask-sources li").all_inner_texts()[:2])
+    page.screenshot(path=str(OUT / "1b_ask.png"), full_page=True)
+
     # 2. Feedback and survey
     page.locator(".flag").first.get_by_role("button", name="Yes, a real problem").click()
     page.wait_for_selector(".flag .thanks:has-text('Thanks')")

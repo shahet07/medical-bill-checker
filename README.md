@@ -46,6 +46,21 @@ Open http://127.0.0.1:8765 and create an account. Users can upload a bill (and E
 
 The page is plain HTML/CSS/JS with no third-party scripts. A strict Content-Security-Policy blocks inline scripts, and bill data is only inserted as text. `scripts/ui_check.py` drives the whole flow in headless Chrome.
 
+## Ask a question (RAG)
+
+On the results page, users can ask questions like "How do I appeal?" or "Why doesn't my bill match my EOB?". The answers are grounded in the user's own bill data and in a small knowledge base of plain-language guides, and each answer cites the guides it used.
+
+- **Knowledge base:** 13 guides in `src/billchecker/knowledge/`, written for this project. Topics: reading an EOB, itemized bills and HIPAA access, common errors, denials and appeals, the No Surprises Act, good faith estimates, financial assistance, payment plans, network status, codes, records, medical debt, and what the flags mean. Each guide names the official source it's based on (CMS, HealthCare.gov, IRS, HHS, CFPB). They are general information, so review them periodically, because rules change.
+- **Retrieval:** BM25 keyword search, merged with Gemini embeddings (`gemini-embedding-001`) by reciprocal rank fusion when an API key is set. Embeddings also let Spanish questions find the English guides. After editing a guide, rebuild the index with `scripts/build_rag_index.py`. If the index is stale or the embeddings call fails, it falls back to keyword search.
+- **Measured** on 16 English and 4 Spanish questions (`tests/rag_queries.py`):
+
+  | Search | English, correct in top 3 | Spanish, correct in top 3 |
+  |---|---|---|
+  | Keyword only | 16/16 | 1/4 |
+  | Hybrid | 16/16 (15/16 at #1) | 4/4 |
+- **Guardrails:** the model sees only the retrieved passages and a minimal summary of the bill (no account or claim numbers). It must cite passages it was given. Answers with invented numbers, advice or accusation wording not present in the sources, or no grounding are replaced by a fallback that links the related guides.
+- **Privacy:** questions are never stored or logged. Analytics only count that a question was asked.
+
 ## Use it from an AI assistant (MCP)
 
 `billchecker-mcp` is a local [Model Context Protocol](https://modelcontextprotocol.io) server. It lets Claude Desktop, Claude Code, or another MCP client check bills on your computer. It stores nothing: no database and no accounts.
@@ -55,6 +70,7 @@ The page is plain HTML/CSS/JS with no third-party scripts. A strict Content-Secu
 | `check_bill` | Reads bill and EOB files (PDF or photos) with the configured LLM, runs every check, and explains each line and flag |
 | `check_extracted_bill` | Runs the checks on bill/EOB data the assistant extracted itself. No LLM, no network, no API key. |
 | `create_letter` | Writes any of the five letters, optionally as a PDF. Flags are recomputed from the data, so the assistant can't add flags the checks didn't raise. |
+| `search_guides` | Searches the billing-rights guides (see below) and returns passages with their official sources, so the assistant can ground its answers |
 
 Resources `billchecker://schema/bill` and `billchecker://schema/eob` describe the data format. The `review_bill` prompt runs the whole workflow.
 
