@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Medical Bill Checker</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <h1>Medical Bill Checker</h1>
+      <p class="tagline">Understand your medical bill, compare it with your insurance statement, and get a letter to send if something needs checking.</p>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <p id="error-banner" class="banner banner-error" role="alert" hidden></p>
+
+    <!-- Upload -->
+    <section id="upload-view" class="card" hidden>
+      <h2>Upload your bill</h2>
+      <form id="upload-form" novalidate>
+        <div class="field">
+          <label for="bill-file">Medical bill <span class="req">(required)</span></label>
+          <input id="bill-file" name="bill" type="file" accept="application/pdf,image/jpeg,image/png" required>
+          <p class="hint">PDF, JPG, or PNG. Up to 20 MB and 20 pages. A clear, flat photo works best.</p>
+        </div>
+        <div class="field">
+          <label for="eob-file">Explanation of Benefits (EOB) from your insurer <span class="opt">(optional)</span></label>
+          <input id="eob-file" name="eob" type="file" accept="application/pdf,image/jpeg,image/png">
+          <p class="hint">Adding the EOB lets us compare what your insurer says you owe with what the bill asks for.</p>
+        </div>
+        <button id="upload-button" type="submit" class="primary">Check my bill</button>
+      </form>
+      <p class="privacy">Your files are encrypted and deleted automatically after 24 hours. You can delete them sooner at any time.</p>
+    </section>
+
+    <!-- Working -->
+    <section id="status-view" class="card" hidden>
+      <h2>Checking your bill</h2>
+      <div class="status-row">
+        <span class="spinner" aria-hidden="true"></span>
+        <p id="status-text" aria-live="polite">Starting…</p>
+      </div>
+      <button id="cancel-button" type="button" class="link">Cancel and delete</button>
+    </section>
+
+    <!-- Needs confirmation -->
+    <section id="confirm-view" class="card" hidden>
+      <h2>Please confirm two amounts</h2>
+      <p>We read your bill, but some numbers did not add up. Please check them against your paper bill so the comparison is accurate.</p>
+      <ul id="confirm-problems" class="problems"></ul>
+      <form id="confirm-form" novalidate>
+        <div class="field">
+          <label for="confirm-billed">Total charges</label>
+          <input id="confirm-billed" type="text" inputmode="decimal" placeholder="e.g. 1250.00" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="confirm-balance">Amount due (what the bill asks you to pay now)</label>
+          <input id="confirm-balance" type="text" inputmode="decimal" placeholder="e.g. 350.00" autocomplete="off">
+        </div>
+        <p class="hint">Leave a box empty if the bill does not show that amount.</p>
+        <button type="submit" class="primary">Confirm and continue</button>
+      </form>
+    </section>
+
+    <!-- Failed -->
+    <section id="failed-view" class="card" hidden>
+      <h2>We could not finish checking this bill</h2>
+      <p id="failed-text"></p>
+      <button id="failed-restart" type="button" class="primary">Try again</button>
+    </section>
+
+    <!-- Results -->
+    <section id="results-view" hidden>
+      <div class="card">
+        <h2>Summary</h2>
+        <dl id="summary" class="summary"></dl>
+        <p id="eob-note" class="note" hidden></p>
+        <p id="warning-note" class="note" hidden>Some lines were hard to read. Please compare them with your paper bill.</p>
+      </div>
+
+      <div class="card">
+        <h2 id="flags-heading">Things worth checking</h2>
+        <p id="flags-intro" class="muted">These are things to ask the billing office about. They are not confirmed errors.</p>
+        <div id="flags"></div>
+      </div>
+
+      <div class="card">
+        <h2>What's on your bill</h2>
+        <div class="table-wrap">
+          <table id="lines">
+            <thead>
+              <tr><th scope="col" class="date">Date</th><th scope="col">Service</th><th scope="col" class="num">Charge</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Get a letter</h2>
+        <p class="muted">We fill in a letter you can mail or email to the billing office. Your details below are used only to write the letter. We do not save them.</p>
+        <form id="letter-form" novalidate>
+          <fieldset class="field">
+            <legend>Letter type</legend>
+            <label class="choice"><input type="radio" name="kind" value="dispute" id="kind-dispute"> Ask them to review the items above</label>
+            <label class="choice"><input type="radio" name="kind" value="itemized_request" id="kind-itemized"> Ask for an itemized bill</label>
+          </fieldset>
+          <p id="dispute-hint" class="hint">The letter includes the items you left ticked above.</p>
+          <div class="field">
+            <label for="p-name">Your name</label>
+            <input id="p-name" type="text" autocomplete="name" maxlength="200" required>
+          </div>
+          <div class="field">
+            <label for="p-address">Your mailing address <span class="opt">(optional)</span></label>
+            <textarea id="p-address" rows="3" autocomplete="street-address" placeholder="Street&#10;City, State ZIP"></textarea>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="p-phone">Phone <span class="opt">(optional)</span></label>
+              <input id="p-phone" type="tel" autocomplete="tel" maxlength="50">
+            </div>
+            <div class="field">
+              <label for="p-email">Email <span class="opt">(optional)</span></label>
+              <input id="p-email" type="email" autocomplete="email" maxlength="200">
+            </div>
+          </div>
+          <div class="field">
+            <label for="p-account">Full account number from your bill <span class="opt">(optional)</span></label>
+            <input id="p-account" type="text" maxlength="50" autocomplete="off">
+            <p class="hint">We only keep the last 4 digits. Type the full number here so the billing office can find your account.</p>
+          </div>
+          <div class="field">
+            <label for="p-note">Anything you'd like to add <span class="opt">(optional)</span></label>
+            <textarea id="p-note" rows="3" maxlength="1000"></textarea>
+          </div>
+          <button type="submit" class="primary">Create letter</button>
+        </form>
+        <div id="letter-output" hidden>
+          <pre id="letter-text" class="letter" tabindex="0"></pre>
+          <div class="actions">
+            <button id="copy-letter" type="button">Copy</button>
+            <button id="download-letter" type="button">Download</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card actions-card">
+        <button id="new-bill" type="button">Check another bill</button>
+        <button id="delete-case" type="button" class="danger">Delete my data now</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="wrap site-footer">
+    <p>This tool helps you understand and organize your medical bills. It is not legal, medical, or financial advice. Flags are things to ask about, not proof of an error.</p>
+  </footer>
+</body>
+</html>

@@ -13,7 +13,7 @@ MVP per `medical_bill_checker_design.md` and `medical_bill_checker_hld_lld.md`.
 - [x] Plain-language explanations with per-item guardrails (`src/billchecker/explanation.py`)
 - [x] Letters: itemized-bill request and dispute, template-only (`src/billchecker/letters.py`)
 - [x] API: sessions, encrypted 24h storage, background jobs (`src/billchecker/api.py`, `store.py`, `pipeline.py`)
-- [ ] Web UI
+- [x] Web UI: upload, results, letters, delete (`src/billchecker/web/`)
 
 ## Setup
 
@@ -22,6 +22,12 @@ python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 .venv/bin/python -m pytest          # no network, no cost
 ```
+
+## Running the app
+
+Start the server as below, then open http://127.0.0.1:8765. The page uploads a bill (and an EOB, optionally), shows each line with a plain-language explanation and the flags with their evidence, creates a letter, and lets the user delete everything.
+
+It's plain HTML/CSS/JS with no third-party scripts. A strict Content-Security-Policy blocks inline scripts, and bill data is only inserted as text. `scripts/ui_check.py` drives the whole flow in headless Chrome.
 
 ## Running the API
 

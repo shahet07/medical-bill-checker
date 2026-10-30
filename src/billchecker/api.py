@@ -24,6 +24,8 @@ from pathlib import Path
 from typing import Callable, Deque, Dict, List, Literal, Optional, Tuple
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
 from .ingest import MAX_BYTES, IngestError, ingest, sniff_type
@@ -35,6 +37,12 @@ from .store import Store, hash_session, load_key
 
 log = logging.getLogger("billchecker.api")
 
+WEB_DIR = Path(__file__).parent / "web"
+# Same-origin only, no inline script or style, no framing, no third-party anything.
+CSP = (
+    "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+    "connect-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'"
+)
 SESSION_COOKIE = "bc_session"
 MIME = {"pdf": "application/pdf", "png": "image/png", "jpeg": "image/jpeg"}
 # action -> (max requests, window in seconds), per session
@@ -149,7 +157,15 @@ def create_app(settings: Settings) -> FastAPI:
         response.headers["X-Frame-Options"] = "DENY"
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
+        else:
+            response.headers["Content-Security-Policy"] = CSP
         return response
+
+    @app.get("/", include_in_schema=False)
+    def index():
+        return FileResponse(WEB_DIR / "index.html", headers={"Cache-Control": "no-cache"})
+
+    app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
     def session(request: Request, response: Response) -> str:
         token = request.cookies.get(SESSION_COOKIE)
