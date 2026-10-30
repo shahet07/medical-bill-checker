@@ -28,12 +28,12 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
-from .ingest import MAX_BYTES, IngestError, ingest, sniff_type
+from .ingest import MAX_BYTES, MAX_FILES, IngestError, ingest_many, sniff_type
 from .letters import MAX_NOTE_CHARS, Patient, dispute, itemized_request
 from .llm import JsonLLM, make_llm
 from .models import Bill, Eob, Flag, Money
 from .pipeline import CaseRunner
-from .store import Store, hash_session, load_key
+from .store import Store, hash_session, load_key, pack_files
 
 log = logging.getLogger("billchecker.api")
 
@@ -44,7 +44,8 @@ CSP = (
     "connect-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'"
 )
 SESSION_COOKIE = "bc_session"
-MIME = {"pdf": "application/pdf", "png": "image/png", "jpeg": "image/jpeg"}
+MIME = {"pdf": "application/pdf", "png": "image/png", "jpeg": "image/jpeg", "heic": "image/heic"}
+MAX_EOBS = 5
 # action -> (max requests, window in seconds), per session
 DEFAULT_LIMITS = {"upload": (20, 3600), "case": (10, 3600), "letter": (60, 3600), "confirm": (20, 3600)}
 
@@ -71,7 +72,8 @@ class _Body(BaseModel):
 
 class CreateCase(_Body):
     bill_upload_id: str
-    eob_upload_id: Optional[str] = None
+    eob_upload_ids: List[str] = Field(default_factory=list, max_length=MAX_EOBS)
+    eob_upload_id: Optional[str] = None  # single-EOB shorthand
 
 
 class ConfirmTotals(_Body):
@@ -188,14 +190,24 @@ def create_app(settings: Settings) -> FastAPI:
         return case
 
     @app.post("/api/uploads", status_code=201)
-    def upload(kind: Literal["bill", "eob"] = Form(...), file: UploadFile = File(...), sess: str = Depends(session)):
+    def upload(kind: Literal["bill", "eob"] = Form(...), file: List[UploadFile] = File(...), sess: str = Depends(session)):
+        """One document, as one file or several (e.g. a photo of each page)."""
         limiter.check(sess, "upload")
-        data = file.file.read(MAX_BYTES + 1)
+        if len(file) > MAX_FILES:
+            raise _error(422, "too_many_files", "Please upload at most 10 files at a time.")
+        files, total = [], 0
+        for f in file:
+            data = f.file.read(MAX_BYTES + 1 - total)
+            total += len(data)
+            if total > MAX_BYTES:
+                raise _error(422, "too_large", "These files add up to more than 20 MB. Please upload smaller files.")
+            files.append(data)
         try:
-            doc = ingest(data)  # validates type, size, pages, readability up front
+            doc = ingest_many(files)  # validates type, size, pages, readability up front
         except IngestError as exc:
             raise _error(422, exc.code, exc.message)
-        row = store.add_upload(sess, kind, MIME[sniff_type(data)], len(doc.pages), data)
+        mime = MIME[sniff_type(files[0])] if len(files) == 1 else "multipart/mixed"
+        row = store.add_upload(sess, kind, mime, len(doc.pages), pack_files(files))
         return {"upload_id": row.upload_id, "kind": kind, "page_count": row.page_count, "expires_at": row.expires_at}
 
     @app.post("/api/cases", status_code=201)
@@ -204,11 +216,14 @@ def create_app(settings: Settings) -> FastAPI:
         bill = store.get_upload(sess, body.bill_upload_id) if len(body.bill_upload_id) == 32 else None
         if bill is None or bill.kind != "bill":
             raise _error(404, "not_found", "Bill upload not found. It may have expired.")
-        if body.eob_upload_id:
-            eob = store.get_upload(sess, body.eob_upload_id) if len(body.eob_upload_id) == 32 else None
+        eob_ids = list(dict.fromkeys(body.eob_upload_ids + ([body.eob_upload_id] if body.eob_upload_id else [])))
+        if len(eob_ids) > MAX_EOBS:
+            raise _error(422, "too_many_eobs", "Please add at most 5 EOBs to one bill.")
+        for eob_id in eob_ids:
+            eob = store.get_upload(sess, eob_id) if len(eob_id) == 32 else None
             if eob is None or eob.kind != "eob":
                 raise _error(404, "not_found", "EOB upload not found. It may have expired.")
-        case = store.add_case(sess, body.bill_upload_id, body.eob_upload_id)
+        case = store.add_case(sess, body.bill_upload_id, eob_ids)
         runner.submit(case.case_id)
         case = store.get_case(sess, case.case_id)
         return {"case_id": case.case_id, "status": case.status}

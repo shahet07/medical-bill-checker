@@ -4,7 +4,9 @@
 "use strict";
 
 const POLL_MS = 3000;
-const MAX_FILE_BYTES = 20 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+const MAX_FILES = 10;
+const MAX_EOBS = 5;
 const CASE_KEY = "billchecker.case";
 const VIEWS = ["upload-view", "status-view", "confirm-view", "failed-view", "results-view"];
 
@@ -118,30 +120,39 @@ async function api(method, path, body) {
 
 // --- Upload --------------------------------------------------------------------------
 
-async function uploadFile(kind, file) {
-  if (file.size > MAX_FILE_BYTES) throw new Error("“" + file.name + "” is larger than 20 MB.");
+// One document as one or more files (e.g. a photo of each page).
+async function uploadFiles(kind, files) {
+  const list = [...files];
+  if (list.length > MAX_FILES) throw new Error("Please choose at most 10 files for one document.");
+  if (list.reduce((n, f) => n + f.size, 0) > MAX_UPLOAD_BYTES) throw new Error("These files add up to more than 20 MB.");
   const form = new FormData();
   form.append("kind", kind);
-  form.append("file", file);
+  for (const f of list) form.append("file", f);
   return api("POST", "/api/uploads", form);
+}
+
+function addEobInput() {
+  const box = $("#eob-inputs");
+  if (box.children.length >= MAX_EOBS) return;
+  const n = box.children.length + 1;
+  box.append(el("input", { class: "eob-file", type: "file", multiple: true, "aria-label": "EOB " + n, accept: $("#eob-file").getAttribute("accept") }));
+  $("#add-eob").hidden = box.children.length >= MAX_EOBS;
 }
 
 async function onUpload(event) {
   event.preventDefault();
   showError("");
-  const bill = $("#bill-file").files[0];
-  const eob = $("#eob-file").files[0];
-  if (!bill) return showError("Please choose your bill to upload.");
+  const bill = $("#bill-file").files;
+  const eobs = [...document.querySelectorAll(".eob-file")].map((i) => i.files).filter((f) => f.length);
+  if (!bill.length) return showError("Please choose your bill to upload.");
   const button = $("#upload-button");
   button.disabled = true;
   button.textContent = "Uploading…";
   try {
-    const billUp = await uploadFile("bill", bill);
-    const eobUp = eob ? await uploadFile("eob", eob) : null;
-    const created = await api("POST", "/api/cases", {
-      bill_upload_id: billUp.upload_id,
-      eob_upload_id: eobUp ? eobUp.upload_id : null,
-    });
+    const billUp = await uploadFiles("bill", bill);
+    const eobIds = [];
+    for (const files of eobs) eobIds.push((await uploadFiles("eob", files)).upload_id);
+    const created = await api("POST", "/api/cases", { bill_upload_id: billUp.upload_id, eob_upload_ids: eobIds });
     remember(created.case_id);
     show("status-view");
     poll();
@@ -237,8 +248,10 @@ function renderResults(c) {
   $("#summary").replaceChildren(...rows.flatMap(([k, v, cls]) => [el("dt", {}, k), el("dd", { class: cls }, v)]));
 
   const eobNote = $("#eob-note");
-  eobNote.hidden = c.eob_status !== "unreadable";
-  eobNote.textContent = "We could not read your EOB, so the bill was checked on its own. Try uploading a clearer copy to compare them.";
+  eobNote.hidden = c.eob_status !== "unreadable" && c.eob_status !== "partial";
+  eobNote.textContent = c.eob_status === "partial"
+    ? "We could not read one of your EOBs, so the comparison may be incomplete. Try uploading a clearer copy."
+    : "We could not read your EOB, so the bill was checked on its own. Try uploading a clearer copy to compare them.";
   $("#warning-note").hidden = !(c.warnings && c.warnings.length) && bill.extraction_confidence !== "low";
 
   renderFlags(c);
@@ -399,6 +412,8 @@ function reset(message) {
   caseData = null;
   lastLetter = null;
   $("#upload-form").reset();
+  [...document.querySelectorAll(".eob-file")].slice(1).forEach((i) => i.remove());
+  $("#add-eob").hidden = false;
   $("#letter-form").reset();
   showError(message || "");
   show("upload-view");
@@ -427,6 +442,7 @@ async function deleteCase() {
 
 document.addEventListener("DOMContentLoaded", () => {
   $("#upload-form").addEventListener("submit", onUpload);
+  $("#add-eob").addEventListener("click", addEobInput);
   $("#confirm-form").addEventListener("submit", onConfirm);
   $("#letter-form").addEventListener("submit", onLetter);
   $("#copy-letter").addEventListener("click", onCopy);

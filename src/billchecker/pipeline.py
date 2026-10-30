@@ -16,12 +16,12 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, Optional
 
 from .explanation import explain
-from .extraction import extract_bill, extract_eob
-from .ingest import IngestError, ingest
+from .extraction import extract_bill, extract_eob, merge_eobs
+from .ingest import IngestError, ingest_many
 from .llm import JsonLLM, LLMUnavailable
 from .models import Bill, Eob
 from .rules import run_rules
-from .store import CaseRow, Store
+from .store import CaseRow, Store, unpack_files
 
 log = logging.getLogger("billchecker.pipeline")
 
@@ -84,17 +84,22 @@ class CaseRunner:
             eob = Eob.model_validate(previous["eob"]) if previous.get("eob") else None
             return self._finish(case.case_id, bill, eob, previous)
 
-        bill_res = extract_bill(ingest(self._blob(case.bill_upload_id)), self.llm)
+        bill_res = extract_bill(ingest_many(self._files(case.bill_upload_id)), self.llm)
         if bill_res.data is None:
             self.store.put_result(case.case_id, _result(error_message=UNREADABLE_BILL, problems=bill_res.problems))
             return self._set(case.case_id, "failed", "unreadable")
 
         eob, eob_status, warnings = None, "none", list(bill_res.warnings)
-        if case.eob_upload_id:
-            eob_res = extract_eob(ingest(self._blob(case.eob_upload_id)), self.llm)
-            eob = eob_res.data
-            eob_status = "ok" if eob is not None else "unreadable"
-            warnings += ["EOB: " + w for w in eob_res.warnings]
+        if case.eob_upload_ids:
+            read = []
+            for n, upload_id in enumerate(case.eob_upload_ids, 1):
+                doc = ingest_many(self._files(upload_id))
+                eob_res = extract_eob(doc, self.llm)
+                if eob_res.data is not None:
+                    read.append((eob_res.data, len(doc.pages)))
+                warnings += ["EOB {}: {}".format(n, w) for w in eob_res.warnings]
+            eob = merge_eobs(read) if read else None
+            eob_status = "ok" if len(read) == len(case.eob_upload_ids) else "partial" if read else "unreadable"
 
         result = _result(
             bill=bill_res.data.model_dump(mode="json"),
@@ -124,11 +129,11 @@ class CaseRunner:
         self.store.put_result(case_id, result)
         self._set(case_id, "ready")
 
-    def _blob(self, upload_id: str) -> bytes:
+    def _files(self, upload_id: str):
         data = self.store.get_blob(upload_id)
         if data is None:
             raise IngestError("expired", "This upload has expired. Please upload the file again.")
-        return data
+        return unpack_files(data)
 
     def _set(self, case_id: str, status: str, error_code: Optional[str] = None, bump: bool = False) -> None:
         self.store.set_status(case_id, status, error_code, bump_attempts=bump)

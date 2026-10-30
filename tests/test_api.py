@@ -223,7 +223,7 @@ def test_llm_outage_gives_up_after_max_attempts(client, llm):
 
 @pytest.mark.parametrize(
     "data, code",
-    [(b"hello", "unsupported_type"), (b"%PDF-1.4 broken", "unreadable"), (b"\x00\x00\x00\x18ftypheic" + b"0" * 32, "unsupported_type")],
+    [(b"hello", "unsupported_type"), (b"%PDF-1.4 broken", "unreadable"), (b"\x00\x00\x00\x18ftypheic" + b"0" * 32, "unreadable")],
 )
 def test_bad_uploads_rejected(client, data, code):
     r = upload(client, "bill", data)
@@ -307,3 +307,65 @@ def test_logs_contain_no_document_data(client, llm, caplog):
     assert "status=ready" in text
     for leak in ("150.00", "999", "Complete blood", "Riverside", "Not medically", "Sam Example"):
         assert leak not in text
+
+
+# --- Several files and several EOBs ---------------------------------------------------------
+
+
+def split_eob(case):
+    """The clean case's EOB as two claims: first two lines, then the last."""
+    full = expected_eob(case.eob)
+    a, b = copy.deepcopy(full), copy.deepcopy(full)
+    a["service_lines"], b["service_lines"] = full["service_lines"][:2], [dict(full["service_lines"][2], line_id="E1")]
+    a["claim_id"], b["claim_id"] = "C-1", "C-2"
+    a["totals"] = {"patient_responsibility": "35.00", "source": None}
+    b["totals"] = {"patient_responsibility": "5.00", "source": None}
+    return a, b
+
+
+def test_bill_from_several_photos(client, llm):
+    from synthetic import photo
+
+    pdf = render_bill(BY_NAME["clean"].bill)
+    files = [("file", ("p1.jpg", photo(pdf, 1), "image/jpeg")), ("file", ("p2.jpg", photo(pdf, 2), "image/jpeg"))]
+    r = client.post("/api/uploads", data={"kind": "bill"}, files=files)
+    assert r.status_code == 201 and r.json()["page_count"] == 2
+    llm.queues["bill"].append(expected_bill(BY_NAME["clean"].bill))
+    case_id = client.post("/api/cases", json={"bill_upload_id": r.json()["upload_id"]}).json()["case_id"]
+    assert client.get("/api/cases/" + case_id).json()["status"] == "ready"
+
+
+def test_case_with_two_eobs_is_compared_against_their_sum(client, llm):
+    case = BY_NAME["clean"]
+    a, b = split_eob(case)
+    llm.queues["bill"].append(expected_bill(case.bill))
+    llm.queues["eob"] += [a, b]
+    bill_id = upload(client, "bill", render_bill(case.bill)).json()["upload_id"]
+    eob_ids = [upload(client, "eob", render_eob(case.eob)).json()["upload_id"] for _ in range(2)]
+    case_id = client.post("/api/cases", json={"bill_upload_id": bill_id, "eob_upload_ids": eob_ids}).json()["case_id"]
+    got = client.get("/api/cases/" + case_id).json()
+    assert got["status"] == "ready" and got["eob_status"] == "ok"
+    assert got["flags"] == []  # 35 + 5 = 40 matches the bill's amount due
+    assert got["eob"]["claim_id"] == "C-1, C-2"
+    assert [sl["line_id"] for sl in got["eob"]["service_lines"]] == ["E1", "E2", "E3"]
+    assert [sl["source_page"] for sl in got["eob"]["service_lines"]] == [1, 1, 2]
+
+
+def test_one_unreadable_eob_of_two_is_partial(client, llm):
+    case = BY_NAME["clean"]
+    a, _ = split_eob(case)
+    llm.queues["bill"].append(expected_bill(case.bill))
+    llm.queues["eob"] += [a, "garbage", "garbage"]
+    bill_id = upload(client, "bill", render_bill(case.bill)).json()["upload_id"]
+    eob_ids = [upload(client, "eob", render_eob(case.eob)).json()["upload_id"] for _ in range(2)]
+    case_id = client.post("/api/cases", json={"bill_upload_id": bill_id, "eob_upload_ids": eob_ids}).json()["case_id"]
+    got = client.get("/api/cases/" + case_id).json()
+    assert got["eob_status"] == "partial"
+    assert [f["rule"] for f in got["flags"]] == ["balance_mismatch"]  # 35 of 40 found
+
+
+def test_too_many_eobs_rejected(client):
+    ids = [upload(client, "eob", render_eob(BY_NAME["clean"].eob)).json()["upload_id"] for _ in range(6)]
+    bill_id = upload(client, "bill", render_bill(BY_NAME["clean"].bill)).json()["upload_id"]
+    r = client.post("/api/cases", json={"bill_upload_id": bill_id, "eob_upload_ids": ids})
+    assert r.status_code == 422

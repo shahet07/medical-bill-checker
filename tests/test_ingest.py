@@ -5,7 +5,7 @@ from PIL import Image
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
-from billchecker.ingest import MAX_BYTES, MAX_IMAGE_EDGE, IngestError, ingest, sniff_type
+from billchecker.ingest import MAX_BYTES, MAX_IMAGE_EDGE, IngestError, ingest, ingest_many, sniff_type
 
 
 def by_name(files, name):
@@ -91,7 +91,7 @@ def test_mixed_pdf_only_renders_pages_without_text():
     [
         (b"%PDF-" + b"0" * MAX_BYTES, "too_large"),
         (b"hello, not a document", "unsupported_type"),
-        (b"\x00\x00\x00\x18ftypheic" + b"0" * 32, "unsupported_type"),
+        (b"\x00\x00\x00\x18ftypheic" + b"0" * 32, "unreadable"),
         (b"%PDF-1.4 this is not really a pdf", "unreadable"),
         (b"\x89PNG\r\n\x1a\n" + b"corrupt", "unreadable"),
     ],
@@ -103,10 +103,47 @@ def test_rejects_bad_uploads(data, code):
     assert err.value.message
 
 
-def test_heic_message_asks_for_jpg():
+def heic(size=(300, 200)):
+    buf = io.BytesIO()
+    Image.new("RGB", size, "white").save(buf, format="HEIF")
+    return buf.getvalue()
+
+
+def test_iphone_heic_photo_accepted_as_jpeg():
+    data = heic()
+    assert sniff_type(data) == "heic"
+    [page] = ingest(data).pages
+    assert page.media_type == "image/jpeg"
+    assert Image.open(io.BytesIO(page.image)).size == (300, 200)
+
+
+def test_several_files_become_one_document():
+    doc = ingest_many([jpeg(), pdf_with_pages(2), heic()])
+    assert doc.kind == "mixed"
+    assert [p.number for p in doc.pages] == [1, 2, 3, 4]
+    assert [p.file_index for p in doc.pages] == [0, 1, 1, 2]
+    assert doc.pages[1].text is not None and doc.pages[0].image is not None
+
+
+def test_limits_apply_across_files():
     with pytest.raises(IngestError) as err:
-        ingest(b"\x00\x00\x00\x18ftypheic" + b"0" * 32)
-    assert "JPG" in err.value.message
+        ingest_many([pdf_with_pages(15), pdf_with_pages(6)])
+    assert err.value.code == "too_many_pages"
+    with pytest.raises(IngestError) as err:
+        ingest_many([jpeg()] * 11)
+    assert err.value.code == "too_many_files"
+    with pytest.raises(IngestError) as err:
+        ingest_many([b"%PDF-" + b"0" * (MAX_BYTES // 2)] * 2 + [b"x"])
+    assert err.value.code == "too_large"
+    with pytest.raises(IngestError) as err:
+        ingest_many([])
+    assert err.value.code == "unsupported_type"
+
+
+def test_one_bad_file_rejects_the_upload():
+    with pytest.raises(IngestError) as err:
+        ingest_many([jpeg(), b"not a document"])
+    assert err.value.code == "unsupported_type"
 
 
 def test_rejects_too_many_pages():

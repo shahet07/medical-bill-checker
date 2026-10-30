@@ -25,13 +25,16 @@
       <form id="upload-form" novalidate>
         <div class="field">
           <label for="bill-file">Medical bill <span class="req">(required)</span></label>
-          <input id="bill-file" name="bill" type="file" accept="application/pdf,image/jpeg,image/png" required>
-          <p class="hint">PDF, JPG, or PNG. Up to 20 MB and 20 pages. A clear, flat photo works best.</p>
+          <input id="bill-file" name="bill" type="file" accept="application/pdf,image/jpeg,image/png,image/heic,image/heif,.heic,.heif" multiple required>
+          <p class="hint">PDF or photos (JPG, PNG, iPhone HEIC). If your bill has several pages, select a photo of each page together. Up to 20 MB and 20 pages. A clear, flat photo works best.</p>
         </div>
         <div class="field">
           <label for="eob-file">Explanation of Benefits (EOB) from your insurer <span class="opt">(optional)</span></label>
-          <input id="eob-file" name="eob" type="file" accept="application/pdf,image/jpeg,image/png">
-          <p class="hint">Adding the EOB lets us compare what your insurer says you owe with what the bill asks for.</p>
+          <div id="eob-inputs">
+            <input id="eob-file" class="eob-file" name="eob" type="file" accept="application/pdf,image/jpeg,image/png,image/heic,image/heif,.heic,.heif" multiple>
+          </div>
+          <button id="add-eob" type="button" class="link">+ Add another EOB</button>
+          <p class="hint">Adding the EOB lets us compare what your insurer says you owe with what the bill asks for. If the bill covers more than one claim, add each claim's EOB.</p>
         </div>
         <button id="upload-button" type="submit" class="primary">Check my bill</button>
       </form>

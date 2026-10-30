@@ -11,7 +11,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from pydantic import ValidationError
 
@@ -318,3 +318,37 @@ def mask_account(value: Optional[str]) -> Optional[str]:
         return None
     chars = re.sub(r"[^A-Za-z0-9]", "", value)
     return "****" + chars[-4:] if chars else None
+
+
+def merge_eobs(items: List[Tuple[Eob, int]]) -> Eob:
+    """Combine EOBs for several claims on one bill into one Eob.
+
+    items are (eob, page_count) in upload order. Pages are numbered across
+    the EOBs, so page 1 of the second EOB follows the first's last page. Line IDs are
+    renumbered E1..En, and the patient-responsibility total is summed (or
+    left unknown if any EOB lacks one).
+    """
+    if len(items) == 1:
+        return items[0][0]
+    eobs = [e for e, _ in items]
+    lines = []
+    offset = 0
+    for eob, page_count in items:
+        for sl in eob.service_lines:
+            lines.append(
+                sl.model_copy(update={"line_id": "E{}".format(len(lines) + 1), "source_page": sl.source_page + offset})
+            )
+        offset += page_count
+    owed = [e.totals.patient_responsibility for e in eobs]
+    total = None if any(o is None for o in owed) else sum(owed, Decimal("0"))
+    names = list(dict.fromkeys(e.insurer for e in eobs if e.insurer))
+    claims = [e.claim_id for e in eobs if e.claim_id]
+    return Eob.model_validate(
+        {
+            "schema_version": "1.0",
+            "insurer": ", ".join(names) or None,
+            "claim_id": ", ".join(claims) or None,
+            "service_lines": [sl.model_dump() for sl in lines],
+            "totals": {"patient_responsibility": total, "source": None},
+        }
+    )

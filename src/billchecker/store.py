@@ -15,6 +15,7 @@ import json
 import os
 import secrets
 import sqlite3
+import struct
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -26,6 +27,8 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 TTL = timedelta(hours=24)
 ORPHAN_GRACE = timedelta(minutes=10)
 NONCE_BYTES = 12
+SCHEMA_VERSION = 2
+PACK_MAGIC = b"BCF1"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS uploads (
@@ -41,7 +44,7 @@ CREATE TABLE IF NOT EXISTS cases (
     case_id TEXT PRIMARY KEY,
     session_hash TEXT NOT NULL,
     bill_upload_id TEXT NOT NULL,
-    eob_upload_id TEXT,
+    eob_upload_ids TEXT NOT NULL,  -- JSON list of upload IDs
     status TEXT NOT NULL,
     error_code TEXT,
     attempts INTEGER NOT NULL DEFAULT 0,
@@ -49,6 +52,26 @@ CREATE TABLE IF NOT EXISTS cases (
     expires_at TEXT NOT NULL
 );
 """
+
+
+def pack_files(files: List[bytes]) -> bytes:
+    """Several uploaded files -> one blob (count, then length-prefixed files)."""
+    out = [PACK_MAGIC, struct.pack(">I", len(files))]
+    for f in files:
+        out += [struct.pack(">Q", len(f)), f]
+    return b"".join(out)
+
+
+def unpack_files(blob: bytes) -> List[bytes]:
+    if not blob.startswith(PACK_MAGIC):
+        return [blob]
+    (count,) = struct.unpack_from(">I", blob, 4)
+    pos, files = 8, []
+    for _ in range(count):
+        (n,) = struct.unpack_from(">Q", blob, pos)
+        files.append(blob[pos + 8 : pos + 8 + n])
+        pos += 8 + n
+    return files
 
 
 def new_id() -> str:
@@ -86,7 +109,7 @@ class UploadRow:
 class CaseRow:
     case_id: str
     bill_upload_id: str
-    eob_upload_id: Optional[str]
+    eob_upload_ids: List[str]
     status: str
     error_code: Optional[str]
     attempts: int
@@ -111,6 +134,11 @@ class Store:
         self._lock = threading.Lock()
         self._db = sqlite3.connect(str(self.root / "index.sqlite3"), check_same_thread=False)
         self._db.row_factory = sqlite3.Row
+        if self._db.execute("PRAGMA user_version").fetchone()[0] != SCHEMA_VERSION:
+            # Everything stored is temporary, so an old index is simply replaced;
+            # its blobs become orphans and are removed by cleanup().
+            self._db.executescript("DROP TABLE IF EXISTS cases; DROP TABLE IF EXISTS uploads;")
+            self._db.execute("PRAGMA user_version = {}".format(SCHEMA_VERSION))
         self._db.executescript(SCHEMA)
 
     # --- blobs ------------------------------------------------------------------------
@@ -166,21 +194,19 @@ class Store:
 
     # --- cases ------------------------------------------------------------------------
 
-    def add_case(self, session_hash: str, bill_upload_id: str, eob_upload_id: Optional[str]) -> CaseRow:
+    def add_case(self, session_hash: str, bill_upload_id: str, eob_upload_ids: List[str]) -> CaseRow:
         case_id = new_id()
         now = self._now()
         expires = _iso(now + self.ttl)
         with self._lock, self._db:
             self._db.execute(
                 "INSERT INTO cases VALUES (?, ?, ?, ?, 'queued', NULL, 0, ?, ?)",
-                (case_id, session_hash, bill_upload_id, eob_upload_id, _iso(now), expires),
+                (case_id, session_hash, bill_upload_id, json.dumps(eob_upload_ids), _iso(now), expires),
             )
             # The uploads now live as long as the case that uses them.
-            self._db.execute(
-                "UPDATE uploads SET expires_at = ? WHERE upload_id IN (?, ?)",
-                (expires, bill_upload_id, eob_upload_id),
-            )
-        return CaseRow(case_id, bill_upload_id, eob_upload_id, "queued", None, 0, expires)
+            for upload_id in [bill_upload_id] + list(eob_upload_ids):
+                self._db.execute("UPDATE uploads SET expires_at = ? WHERE upload_id = ?", (expires, upload_id))
+        return CaseRow(case_id, bill_upload_id, list(eob_upload_ids), "queued", None, 0, expires)
 
     def get_case(self, session_hash: Optional[str], case_id: str) -> Optional[CaseRow]:
         """session_hash=None is for the worker, which already owns the case."""
@@ -195,7 +221,7 @@ class Store:
         return CaseRow(
             row["case_id"],
             row["bill_upload_id"],
-            row["eob_upload_id"],
+            json.loads(row["eob_upload_ids"]),
             row["status"],
             row["error_code"],
             row["attempts"],
@@ -253,11 +279,12 @@ class Store:
     def _delete_case_rows(self, cases: List[CaseRow]) -> None:
         ids = []
         for c in cases:
-            ids += [c.case_id, c.bill_upload_id] + ([c.eob_upload_id] if c.eob_upload_id else [])
+            ids += [c.case_id, c.bill_upload_id] + c.eob_upload_ids
         with self._lock, self._db:
             for c in cases:
                 self._db.execute("DELETE FROM cases WHERE case_id = ?", (c.case_id,))
-                self._db.execute("DELETE FROM uploads WHERE upload_id IN (?, ?)", (c.bill_upload_id, c.eob_upload_id))
+                for upload_id in [c.bill_upload_id] + c.eob_upload_ids:
+                    self._db.execute("DELETE FROM uploads WHERE upload_id = ?", (upload_id,))
         for blob_id in ids:
             self.delete_blob(blob_id)
 

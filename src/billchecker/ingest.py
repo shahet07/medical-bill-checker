@@ -1,7 +1,9 @@
-"""Turn an uploaded file into pages of text or images for extraction.
+"""Turn uploaded files into pages of text or images for extraction.
 
 PDF pages with a usable text layer are sent as text (cheaper, exact).
-Pages without one (scans) and photos are sent as images.
+Pages without one (scans) and photos (JPG, PNG, HEIC) are sent as images.
+One upload can hold several files, e.g. a photo of each page of a bill;
+they become one document with pages numbered across all files.
 """
 
 import io
@@ -11,10 +13,12 @@ from typing import List, Optional
 
 import pdfplumber
 import pypdfium2
+import pillow_heif
 from PIL import Image, ImageOps
 
-MAX_BYTES = 20 * 1024 * 1024
-MAX_PAGES = 20
+MAX_BYTES = 20 * 1024 * 1024  # per upload, across all its files
+MAX_PAGES = 20  # per upload, across all its files
+MAX_FILES = 10
 # Pages with fewer non-space characters than this are treated as scans.
 MIN_TEXT_CHARS = 40
 # Long edge for images sent to the model. Larger images are downscaled by the
@@ -24,6 +28,8 @@ PDF_RENDER_SCALE = 2.0  # 144 dpi
 Image.MAX_IMAGE_PIXELS = 60_000_000
 # pdfminer logs page content at DEBUG; keep document text out of logs at any app log level.
 logging.getLogger("pdfminer").setLevel(logging.WARNING)
+# iPhones save photos as HEIC by default.
+pillow_heif.register_heif_opener()
 
 
 class IngestError(Exception):
@@ -41,11 +47,12 @@ class Page:
     text: Optional[str]  # set when the page has a usable text layer
     image: Optional[bytes]  # set otherwise
     media_type: Optional[str]  # "image/png" or "image/jpeg" when image is set
+    file_index: int = 0  # which uploaded file the page came from
 
 
 @dataclass(frozen=True)
 class Document:
-    kind: str  # "pdf" or "image"
+    kind: str  # "pdf", "image", or "mixed"
     pages: List[Page]
 
     @property
@@ -66,16 +73,36 @@ def sniff_type(data: bytes) -> Optional[str]:
 
 
 def ingest(data: bytes) -> Document:
-    if len(data) > MAX_BYTES:
-        raise IngestError("too_large", "This file is larger than 20 MB. Please upload a smaller file.")
+    return ingest_many([data])
+
+
+def ingest_many(files: List[bytes]) -> Document:
+    """Several files of one document (e.g. one photo per page) -> one Document."""
+    if not files:
+        raise IngestError("unsupported_type", "Please choose a file to upload.")
+    if len(files) > MAX_FILES:
+        raise IngestError("too_many_files", "Please upload at most 10 files at a time.")
+    if sum(len(f) for f in files) > MAX_BYTES:
+        raise IngestError("too_large", "These files add up to more than 20 MB. Please upload smaller files.")
+    pages: List[Page] = []
+    kinds = set()
+    for index, data in enumerate(files):
+        doc = _ingest_one(data)
+        kinds.add(doc.kind)
+        for p in doc.pages:
+            pages.append(Page(len(pages) + 1, p.text, p.image, p.media_type, index))
+        if len(pages) > MAX_PAGES:
+            raise IngestError("too_many_pages", "This upload has more than 20 pages. Please upload only the bill pages.")
+    return Document(kind=kinds.pop() if len(kinds) == 1 else "mixed", pages=pages)
+
+
+def _ingest_one(data: bytes) -> Document:
     kind = sniff_type(data)
     if kind == "pdf":
         return _ingest_pdf(data)
-    if kind in ("png", "jpeg"):
+    if kind in ("png", "jpeg", "heic"):
         return Document(kind="image", pages=[_image_page(1, data)])
-    if kind == "heic":
-        raise IngestError("unsupported_type", "HEIC photos are not supported yet. Please upload a JPG or PNG.")
-    raise IngestError("unsupported_type", "Please upload a PDF, JPG, or PNG file.")
+    raise IngestError("unsupported_type", "Please upload a PDF, JPG, PNG, or iPhone (HEIC) photo.")
 
 
 def _ingest_pdf(data: bytes) -> Document:

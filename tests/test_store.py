@@ -5,7 +5,9 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from cryptography.exceptions import InvalidTag
 
-from billchecker.store import Store, hash_session, load_key, new_id
+import sqlite3
+
+from billchecker.store import Store, hash_session, load_key, new_id, pack_files, unpack_files
 
 KEY = os.urandom(32)
 S1, S2 = hash_session("session-one"), hash_session("session-two")
@@ -70,7 +72,7 @@ def test_wrong_key_cannot_read(tmp_path, clock):
 
 def test_index_holds_no_document_content(store):
     up = store.add_upload(S1, "bill", "application/pdf", 1, SECRET)
-    case = store.add_case(S1, up.upload_id, None)
+    case = store.add_case(S1, up.upload_id, [])
     store.put_result(case.case_id, {"bill": {"line": "Complete blood count", "charge": "40.00"}})
     index = (store.root / "index.sqlite3").read_bytes()
     assert b"Complete blood" not in index and b"40.00" not in index and b"session-one" not in index
@@ -78,7 +80,7 @@ def test_index_holds_no_document_content(store):
 
 def test_sessions_cannot_see_each_others_data(store):
     up = store.add_upload(S1, "bill", "application/pdf", 1, SECRET)
-    case = store.add_case(S1, up.upload_id, None)
+    case = store.add_case(S1, up.upload_id, [])
     assert store.get_upload(S2, up.upload_id) is None
     assert store.get_case(S2, case.case_id) is None
     assert store.delete_case(S2, case.case_id) is False
@@ -87,7 +89,7 @@ def test_sessions_cannot_see_each_others_data(store):
 
 def test_status_updates_and_attempts(store):
     up = store.add_upload(S1, "bill", "application/pdf", 1, SECRET)
-    case = store.add_case(S1, up.upload_id, None)
+    case = store.add_case(S1, up.upload_id, [])
     store.set_status(case.case_id, "extracting", bump_attempts=True)
     store.set_status(case.case_id, "queued", "llm_unavailable")
     got = store.get_case(None, case.case_id)
@@ -97,7 +99,7 @@ def test_status_updates_and_attempts(store):
 def test_delete_case_removes_case_and_upload_blobs(store):
     bill = store.add_upload(S1, "bill", "application/pdf", 1, SECRET)
     eob = store.add_upload(S1, "eob", "application/pdf", 1, b"eob")
-    case = store.add_case(S1, bill.upload_id, eob.upload_id)
+    case = store.add_case(S1, bill.upload_id, [eob.upload_id])
     store.put_result(case.case_id, {"x": 1})
     assert store.delete_case(S1, case.case_id)
     assert list(store.blobs.iterdir()) == []
@@ -106,7 +108,7 @@ def test_delete_case_removes_case_and_upload_blobs(store):
 
 def test_everything_expires_after_24_hours(store, clock):
     up = store.add_upload(S1, "bill", "application/pdf", 1, SECRET)
-    case = store.add_case(S1, up.upload_id, None)
+    case = store.add_case(S1, up.upload_id, [])
     store.put_result(case.case_id, {"x": 1})
     clock.advance(hours=23, minutes=59)
     assert store.get_case(S1, case.case_id) is not None
@@ -121,7 +123,7 @@ def test_everything_expires_after_24_hours(store, clock):
 def test_upload_lives_as_long_as_its_case(store, clock):
     up = store.add_upload(S1, "bill", "application/pdf", 1, SECRET)
     clock.advance(hours=12)
-    case = store.add_case(S1, up.upload_id, None)
+    case = store.add_case(S1, up.upload_id, [])
     clock.advance(hours=13)  # 25h after upload, 13h after case creation
     store.cleanup()
     assert store.get_blob(up.upload_id) == SECRET
@@ -148,3 +150,30 @@ def test_load_key():
     for bad in (None, "", base64.b64encode(b"short").decode()):
         with pytest.raises(ValueError):
             load_key(bad)
+
+
+def test_pack_unpack_files():
+    files = [b"", b"one", bytes(range(256)) * 10]
+    assert unpack_files(pack_files(files)) == files
+    assert unpack_files(b"%PDF-plain single file") == [b"%PDF-plain single file"]
+
+
+def test_case_with_several_eobs(store):
+    bill = store.add_upload(S1, "bill", "application/pdf", 1, SECRET)
+    eobs = [store.add_upload(S1, "eob", "application/pdf", 1, b"e%d" % i) for i in range(3)]
+    case = store.add_case(S1, bill.upload_id, [e.upload_id for e in eobs])
+    assert store.get_case(S1, case.case_id).eob_upload_ids == [e.upload_id for e in eobs]
+    store.delete_case(S1, case.case_id)
+    assert list(store.blobs.iterdir()) == []
+
+
+def test_old_index_is_replaced(tmp_path, clock):
+    root = tmp_path / "old"
+    root.mkdir()
+    db = sqlite3.connect(str(root / "index.sqlite3"))
+    db.execute("CREATE TABLE cases (case_id TEXT, eob_upload_id TEXT)")
+    db.commit()
+    db.close()
+    s = Store(root, KEY, now=clock)
+    up = s.add_upload(S1, "bill", "application/pdf", 1, SECRET)
+    assert s.add_case(S1, up.upload_id, []).eob_upload_ids == []
