@@ -44,6 +44,7 @@ Open `https://<your domain>`. The certificate appears within a minute of first s
 - **Logs** contain IDs and statuses only. Caddy access logs are turned off.
 - **Updating:** `git pull && docker compose -f deploy/docker-compose.yml up -d --build`. Database changes apply automatically on start.
 - **Keys:** keep `deploy/.env` out of git (it's in `.gitignore`).
+- **Database password:** PostgreSQL sets `POSTGRES_PASSWORD` only when its data volume is first created. Changing it later in `deploy/.env` does not change the existing database's password; change it inside Postgres (`ALTER USER billchecker PASSWORD '...'`) as well, or the app can't connect.
 
 ## Hosts that fit
 Any VPS that runs Docker works, for example DigitalOcean, Hetzner, Linode or AWS Lightsail, at roughly $6–12/month. You can also use a managed PostgreSQL from your host instead of the `db` container: remove the `db` service and set `DATABASE_URL` in `deploy/.env`.

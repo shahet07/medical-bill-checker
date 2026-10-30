@@ -93,6 +93,21 @@ claude mcp add billchecker --env GEMINI_API_KEY=... -- /path/to/medical-bill-che
 
 Leave out the API key to use only `check_extracted_bill` and `create_letter`. The assistant then reads the bill itself, and the checks still run here. Requires Python 3.10+ and `pip install -e ".[mcp]"`.
 
+## Frontend (Next.js)
+
+The web app is a Next.js 16 (App Router) + TypeScript app in `frontend/`. It's built as static files, and FastAPI serves them, so it stays one server with same-origin login cookies.
+
+```sh
+cd frontend && npm install
+npm run build        # writes frontend/out/, which FastAPI serves at /
+npm run dev          # http://localhost:3000 with hot reload; /api is proxied to FastAPI on :8765
+npm run typecheck
+```
+
+- **Security:** the Content-Security-Policy still blocks inline scripts. FastAPI reads the built HTML at startup and allows only the exact SHA-256 hashes of the few inline scripts Next.js writes. There are no inline styles and no third-party scripts.
+- **Same behavior as before:** the components keep the original page's element IDs and CSS, so `scripts/ui_check.py` tests both frontends unchanged.
+- **Fallback:** if `frontend/out` hasn't been built, FastAPI serves the original plain-HTML page in `src/billchecker/web/`. The Docker image builds the frontend in a Node stage.
+
 ## Accounts and data
 
 - **Login:** email and password. Passwords are hashed with Argon2id. Login attempts are limited per IP address, and an account locks for 15 minutes after 10 failed tries. Error messages don't reveal whether an email has an account. Changing your password logs out your other sessions.

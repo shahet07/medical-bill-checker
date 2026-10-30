@@ -159,3 +159,50 @@ def test_server_error_codes_have_spanish(i18n):
     codes |= set(re.findall(r'AuthError\(\s*"([a-z_]+)"', auth)) | set(re.findall(r'"error": "([a-z_]+)"', api))
     codes -= {"expired"}  # only shown via the failed-case screen, which has its own text
     assert codes - set(i18n["SERVER_ERRORS_ES"]) == set()
+
+
+# --- Next.js frontend (static export) --------------------------------------------------------
+
+import base64  # noqa: E402
+import hashlib  # noqa: E402
+
+
+def _fake_export(root):
+    (root / "_next" / "static").mkdir(parents=True)
+    (root / "_next" / "static" / "app.js").write_text("console.log('next')")
+    (root / "index.html").write_text(
+        '<!doctype html><html><head><script src="/_next/static/app.js" async=""></script></head>'
+        "<body><div id=app></div><script>self.__next_f=[1]</script></body></html>"
+    )
+    return root
+
+
+def test_next_frontend_served_with_hash_pinned_csp(pg_dsn, llm, clock, tmp_path):  # noqa: F811
+    from test_api import make_client
+
+    with make_client(pg_dsn, llm, clock, frontend_dir=_fake_export(tmp_path / "out")) as c:
+        r = c.get("/")
+        assert "self.__next_f" in r.text
+        digest = base64.b64encode(hashlib.sha256(b"self.__next_f=[1]").digest()).decode()
+        csp = r.headers["content-security-policy"]
+        assert "script-src 'self' 'sha256-{}'".format(digest) in csp
+        assert "unsafe-inline" not in csp and "unsafe-eval" not in csp
+        assert c.get("/_next/static/app.js").status_code == 200
+        assert c.get("/static/app.js").status_code == 200  # original page's assets still available
+
+
+def test_missing_build_falls_back_to_original_page(pg_dsn, llm, clock, tmp_path):  # noqa: F811
+    from test_api import make_client
+
+    with make_client(pg_dsn, llm, clock, frontend_dir=tmp_path / "nothing-here") as c:
+        r = c.get("/")
+        assert '<script src="/static/app.js"' in r.text
+        assert "sha256-" not in r.headers["content-security-policy"]
+
+
+def test_inline_script_hashes_cover_every_page(tmp_path):
+    from billchecker.api import inline_script_hashes
+
+    root = _fake_export(tmp_path / "out")
+    (root / "404.html").write_text("<script>other()</script><script src=x.js></script>")
+    assert len(inline_script_hashes(root)) == 2

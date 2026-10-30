@@ -90,7 +90,6 @@ const STATIC_ES = {
   your_name: "Su nombre",
   address_label: "Su dirección postal",
   phone_label: "Teléfono",
-  email_label: "Email",
   account_label: "Número de cuenta completo de su factura",
   account_hint: "Solo guardamos los últimos 4 dígitos. Escriba el número completo aquí para que la oficina de facturación encuentre su cuenta.",
   note_label: "Algo que quiera agregar (en inglés)",

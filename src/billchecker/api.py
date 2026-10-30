@@ -55,11 +55,28 @@ from .store import Store, UserRow, load_key, pack_files
 log = logging.getLogger("billchecker.api")
 
 WEB_DIR = Path(__file__).parent / "web"
-# Same-origin only, no inline script or style, no framing, no third-party anything.
-CSP = (
-    "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+# The Next.js frontend, built with `npm run build` in frontend/ (static export).
+DEFAULT_FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend" / "out"
+# Same-origin only, no inline style, no framing, no third-party anything. Inline
+# scripts are allowed only by exact hash (the few that Next.js writes into its HTML).
+CSP_TEMPLATE = (
+    "default-src 'self'; script-src 'self'{hashes}; style-src 'self'; img-src 'self' data:; "
     "connect-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'"
 )
+CSP = CSP_TEMPLATE.format(hashes="")
+_INLINE_SCRIPT = re.compile(rb"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", re.S)
+
+
+def inline_script_hashes(html_dir: Path) -> List[str]:
+    """CSP source expressions for every inline <script> in the built HTML files."""
+    import base64
+    import hashlib
+
+    out = set()
+    for page in html_dir.rglob("*.html"):
+        for body in _INLINE_SCRIPT.findall(page.read_bytes()):
+            out.add("'sha256-{}'".format(base64.b64encode(hashlib.sha256(body).digest()).decode()))
+    return sorted(out)
 SESSION_COOKIE = "bc_session"
 MIME = {"pdf": "application/pdf", "png": "image/png", "jpeg": "image/jpeg", "heic": "image/heic"}
 MAX_EOBS = 5
@@ -84,6 +101,8 @@ class Settings:
     llm: JsonLLM
     reference: Reference = field(default_factory=Reference)
     knowledge: Optional[KnowledgeBase] = None  # default: keyword search over the bundled guides
+    # Built Next.js frontend to serve at "/". None or missing: serve the original page in web/.
+    frontend_dir: Optional[Path] = None
     secure_cookies: bool = True
     inline_jobs: bool = False
     cleanup_interval: Optional[float] = 3600.0  # seconds; None disables the background sweep
@@ -300,6 +319,10 @@ def create_app(settings: Settings) -> FastAPI:
     app.state.store = store
     app.state.runner = runner
 
+    frontend = settings.frontend_dir if settings.frontend_dir and (settings.frontend_dir / "index.html").is_file() else None
+    csp = CSP_TEMPLATE.format(hashes="".join(" " + h for h in inline_script_hashes(frontend))) if frontend else CSP
+    app.state.frontend = frontend
+
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
         # Refuse state-changing API calls made from another site's pages.
@@ -314,13 +337,17 @@ def create_app(settings: Settings) -> FastAPI:
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
         else:
-            response.headers["Content-Security-Policy"] = CSP
+            response.headers["Content-Security-Policy"] = csp
         return response
 
     @app.get("/", include_in_schema=False)
     def index():
-        return FileResponse(WEB_DIR / "index.html", headers={"Cache-Control": "no-cache"})
+        page = (frontend or WEB_DIR) / "index.html"
+        return FileResponse(page, headers={"Cache-Control": "no-cache"})
 
+    if frontend:
+        # Hashed, immutable build assets.
+        app.mount("/_next", StaticFiles(directory=frontend / "_next"), name="next")
     app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
     def current_user(request: Request) -> UserRow:
@@ -701,6 +728,7 @@ def app_from_env() -> FastAPI:
             key=load_key(os.environ.get("BILLCHECKER_KEY")),
             llm=make_llm(),
             reference=reference,
+            frontend_dir=Path(os.environ.get("BILLCHECKER_FRONTEND_DIR", DEFAULT_FRONTEND_DIR)),
             knowledge=KnowledgeBase.from_env(embedder=GeminiEmbedder() if os.environ.get("GEMINI_API_KEY") else None),
             secure_cookies=os.environ.get("BILLCHECKER_INSECURE_COOKIES") != "1",
         )
