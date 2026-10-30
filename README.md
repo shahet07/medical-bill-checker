@@ -11,7 +11,7 @@ MVP per `medical_bill_checker_design.md` and `medical_bill_checker_hld_lld.md`.
 - [x] Swappable LLM providers: Gemini (default) and Claude (`src/billchecker/llm.py`)
 - [x] Synthetic test documents and a live extraction eval
 - [ ] Explanation module
-- [ ] Letters
+- [x] Letters: itemized-bill request and dispute, template-only (`src/billchecker/letters.py`)
 - [ ] API and UI
 
 ## Setup
