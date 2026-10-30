@@ -26,7 +26,7 @@ MVP per `medical_bill_checker_design.md` and `medical_bill_checker_hld_lld.md`.
 ## Setup
 
 ```sh
-python3 -m venv .venv
+python3 -m venv .venv               # Python 3.10 or newer
 .venv/bin/pip install -e ".[dev]"
 scripts/dev_db.sh start             # private PostgreSQL in .pgdata, port 54329
 .venv/bin/python -m pytest          # no network, no LLM cost
@@ -45,6 +45,37 @@ export GEMINI_API_KEY=...
 Open http://127.0.0.1:8765 and create an account. Users can upload a bill (and EOBs), see each line explained and the flags with their evidence, create letters, revisit past bills from **My bills**, and manage or delete their account.
 
 The page is plain HTML/CSS/JS with no third-party scripts. A strict Content-Security-Policy blocks inline scripts, and bill data is only inserted as text. `scripts/ui_check.py` drives the whole flow in headless Chrome.
+
+## Use it from an AI assistant (MCP)
+
+`billchecker-mcp` is a local [Model Context Protocol](https://modelcontextprotocol.io) server. It lets Claude Desktop, Claude Code, or another MCP client check bills on your computer. It stores nothing: no database and no accounts.
+
+| Tool | What it does |
+|---|---|
+| `check_bill` | Reads bill and EOB files (PDF or photos) with the configured LLM, runs every check, and explains each line and flag |
+| `check_extracted_bill` | Runs the checks on bill/EOB data the assistant extracted itself. No LLM, no network, no API key. |
+| `create_letter` | Writes any of the five letters, optionally as a PDF. Flags are recomputed from the data, so the assistant can't add flags the checks didn't raise. |
+
+Resources `billchecker://schema/bill` and `billchecker://schema/eob` describe the data format. The `review_bill` prompt runs the whole workflow.
+
+**Claude Code:**
+```sh
+claude mcp add billchecker --env GEMINI_API_KEY=... -- /path/to/medical-bill-checker/.venv/bin/billchecker-mcp
+```
+
+**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "billchecker": {
+      "command": "/path/to/medical-bill-checker/.venv/bin/billchecker-mcp",
+      "env": { "GEMINI_API_KEY": "..." }
+    }
+  }
+}
+```
+
+Leave out the API key to use only `check_extracted_bill` and `create_letter`. The assistant then reads the bill itself, and the checks still run here. Requires Python 3.10+ and `pip install -e ".[mcp]"`.
 
 ## Accounts and data
 
@@ -142,7 +173,7 @@ The free tier has low per-minute limits. The Gemini client retries 429s with bac
 
 ## Python version
 
-The system Python here is 3.9, which reached end of life in October 2025. Two dependencies are pinned because of it: `anthropic<1` and `reportlab<4.3`. Moving to 3.11+ lifts both pins.
+Python 3.10 or newer (developed on 3.13; the Docker image uses 3.12). `anthropic` stays below 1.x until its client-API changes are migrated.
 
 ## License
 

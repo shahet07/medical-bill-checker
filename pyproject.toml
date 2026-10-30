@@ -2,19 +2,18 @@
 name = "billchecker"
 version = "0.1.0"
 description = "Medical bill checker: extraction schemas and deterministic rules engine"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "MIT" }
 dependencies = [
     "pydantic>=2.7,<3",
-    # anthropic 1.x needs Python 3.10+; lift this pin when the project moves off 3.9.
+    # 1.x changes the client API; upgrade deliberately (see the SDK migration guide).
     "anthropic>=0.125,<1",
     "google-genai>=1.47",
     "pdfplumber>=0.11",
     "pypdfium2>=4",
     "pillow>=10",
     "pillow-heif>=0.18",
-    # Letter PDFs. 4.3+ needs Python 3.10+.
-    "reportlab>=4,<4.3",
+    "reportlab>=4.2",
     "fastapi>=0.115",
     "uvicorn>=0.30",
     "python-multipart>=0.0.9",
@@ -24,11 +23,17 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# MCP server for AI assistants (scripts entry point: billchecker-mcp).
+mcp = ["mcp>=2"]
 dev = [
+    "mcp>=2",
     "pytest>=8",
     # scripts/ui_check.py drives the installed Google Chrome; no browser download needed.
     "playwright>=1.45",
 ]
+
+[project.scripts]
+billchecker-mcp = "billchecker.mcp_server:main"
 
 [tool.setuptools.package-data]
 billchecker = ["web/*"]
@@ -36,9 +41,6 @@ billchecker = ["web/*"]
 [tool.pytest.ini_options]
 pythonpath = ["src", "tests"]
 testpaths = ["tests"]
-# Third-party noise about the end-of-life Python 3.9 and its old LibreSSL.
 filterwarnings = [
-    "ignore::FutureWarning:google",
     "ignore::DeprecationWarning:google",
-    "ignore:urllib3 v2 only supports OpenSSL",
 ]
