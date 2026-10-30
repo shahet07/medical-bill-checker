@@ -3,6 +3,7 @@ name = "billchecker"
 version = "0.1.0"
 description = "Medical bill checker: extraction schemas and deterministic rules engine"
 requires-python = ">=3.9"
+license = { text = "MIT" }
 dependencies = [
     "pydantic>=2.7,<3",
     # anthropic 1.x needs Python 3.10+; lift this pin when the project moves off 3.9.

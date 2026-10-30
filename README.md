@@ -143,3 +143,7 @@ The free tier has low per-minute limits. The Gemini client retries 429s with bac
 ## Python version
 
 The system Python here is 3.9, which reached end of life in October 2025. Two dependencies are pinned because of it: `anthropic<1` and `reportlab<4.3`. Moving to 3.11+ lifts both pins.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
