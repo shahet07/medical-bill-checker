@@ -537,3 +537,20 @@ def test_switching_language_rewrites_explanations_only(client, llm):
     # Same language again: nothing to redo.
     assert client.put("/api/cases/{}/language".format(case_id), json={"language": "es"}).json()["status"] == "ready"
     assert client.put("/api/cases/{}/language".format(case_id), json={"language": "de"}).status_code == 422
+
+
+def test_reference_data_reaches_results(tmp_path, llm, clock):
+    from decimal import Decimal
+
+    from billchecker.reference import PairEdit, Reference
+
+    ref = Reference(
+        pairs={("85025", "36415"): [PairEdit(date(2020, 1, 1), None, "0")]},
+        prices={"99213": Decimal("92.50")},
+        prices_label="Test rate",
+    )
+    with make_client(tmp_path, llm, clock, reference=ref) as c:
+        case_id = start_case(c, llm, "clean")
+        got = c.get("/api/cases/" + case_id).json()
+    assert [f["rule"] for f in got["flags"]] == ["unbundled_pair"]
+    assert got["price_context"] == {"L1": {"reference_price": "92.50"}} and got["prices_label"] == "Test rate"

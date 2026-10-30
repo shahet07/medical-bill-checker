@@ -343,6 +343,7 @@ async function onSurvey(event) {
 function renderLines(c) {
   const lines = c.bill.line_items || [];
   const expl = (c.explanations && c.explanations.lines) || {};
+  const prices = c.price_context || {};
   const body = $("#lines tbody");
   if (!lines.length) {
     body.replaceChildren(el("tr", {}, el("td", { colspan: 3, class: "muted" }, t("no_lines"))));
@@ -362,7 +363,10 @@ function renderLines(c) {
           el("div", { class: "line-desc" }, li.description),
           el("div", { class: "line-date" }, shortDate(li.service_date)),
           li.code ? el("div", { class: "line-code" }, t("code", { code: li.code }) + units) : null,
-          e && e.source === "llm" ? el("div", { class: "line-expl" }, e.text) : null
+          e && e.source === "llm" ? el("div", { class: "line-expl" }, e.text) : null,
+          prices[li.line_id]
+            ? el("div", { class: "line-ref" }, t("reference_price", { label: c.prices_label, price: money(prices[li.line_id].reference_price) }))
+            : null
         ),
         el("td", { class: "num" }, money(li.charge))
       );

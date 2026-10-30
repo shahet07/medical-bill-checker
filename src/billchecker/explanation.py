@@ -174,6 +174,7 @@ FLAG_TEMPLATES_ES = {
     "not_on_eob": "Este servicio aparece en su factura, pero no en el estado de cuenta de su seguro para esa fecha. Es posible que no se haya enviado a su seguro.",
     "charge_mismatch": "El cargo en su factura es diferente de la cantidad que el proveedor le facturó a su seguro por este servicio.",
     "payment_not_applied": "Su seguro dice que pagó, pero la factura no muestra todo ese pago. Es posible que el pago aún no se haya aplicado.",
+    "unbundled_pair": "Dos servicios del mismo día suelen facturarse como uno solo según las reglas de Medicare. Las reglas de su plan pueden ser distintas. Vale la pena preguntar.",
 }
 
 

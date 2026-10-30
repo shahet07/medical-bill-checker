@@ -20,6 +20,7 @@ from .extraction import extract_bill, extract_eob, merge_eobs
 from .ingest import IngestError, ingest_many
 from .llm import JsonLLM, LLMUnavailable
 from .models import Bill, Eob
+from .reference import Reference, price_context
 from .rules import run_rules
 from .store import CaseRow, Store, unpack_files
 
@@ -39,9 +40,11 @@ class CaseRunner:
         inline: bool = False,
         workers: int = 2,
         retry_delay: float = RETRY_DELAY_SECONDS,
+        reference: Optional[Reference] = None,
     ):
         self.store = store
         self.llm = llm
+        self.reference = reference or Reference()
         self.inline = inline  # run jobs synchronously (tests, scripts)
         self.retry_delay = retry_delay
         self._executor = None if inline else ThreadPoolExecutor(max_workers=workers, thread_name_prefix="case")
@@ -115,13 +118,16 @@ class CaseRunner:
 
     def _finish(self, case: CaseRow, bill: Bill, eob: Optional[Eob], result: Dict[str, Any]) -> None:
         case_id = case.case_id
-        flags = run_rules(bill, eob, eob_complete=result.get("eob_status") != "partial")
+        ref = self.reference
+        flags = run_rules(bill, eob, eob_complete=result.get("eob_status") != "partial", extra_rules=ref.extra_rules())
         expl = explain(bill, flags, self.llm, language=case.language)
         for p in expl.problems:
             log.info("case %s explanation fallback %s", case_id, p)
         result = dict(
             result,
             flags=[f.model_dump(mode="json") for f in flags],
+            price_context=price_context(bill, ref.prices) if ref.prices else {},
+            prices_label=ref.prices_label if ref.prices else None,
             explanations={
                 "lines": {k: {"text": v.text, "source": v.source} for k, v in expl.lines.items()},
                 "flags": {k: {"text": v.text, "source": v.source} for k, v in expl.flags.items()},

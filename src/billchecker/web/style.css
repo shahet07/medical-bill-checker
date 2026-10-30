@@ -184,6 +184,7 @@ td.date { white-space: nowrap; color: var(--muted); }
   .line-date { display: block; }
 }
 .line-code { color: var(--muted); font-size: 0.85rem; }
+.line-ref { color: var(--muted); font-size: 0.85rem; margin-top: 4px; font-style: italic; }
 .line-expl { color: var(--muted); font-size: 0.92rem; margin-top: 4px; }
 
 .letter {

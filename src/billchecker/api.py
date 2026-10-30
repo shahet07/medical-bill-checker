@@ -44,6 +44,7 @@ from .letters_pdf import render_pdf
 from .llm import JsonLLM, make_llm
 from .models import Bill, Eob, Flag, Money
 from .pipeline import CaseRunner
+from .reference import Reference, load_pairs, load_prices
 from .store import Store, hash_session, load_key, pack_files
 
 log = logging.getLogger("billchecker.api")
@@ -66,6 +67,7 @@ class Settings:
     data_dir: Path
     key: bytes
     llm: JsonLLM
+    reference: Reference = field(default_factory=Reference)
     secure_cookies: bool = True
     inline_jobs: bool = False
     cleanup_interval: Optional[float] = 3600.0  # seconds; None disables the background sweep
@@ -225,7 +227,7 @@ class RateLimiter:
 
 def create_app(settings: Settings) -> FastAPI:
     store = Store(settings.data_dir, settings.key, now=settings.now)
-    runner = CaseRunner(store, settings.llm, inline=settings.inline_jobs)
+    runner = CaseRunner(store, settings.llm, inline=settings.inline_jobs, reference=settings.reference)
     limiter = RateLimiter(settings.limits)
 
     @asynccontextmanager
@@ -343,6 +345,8 @@ def create_app(settings: Settings) -> FastAPI:
                 {k: result[k] for k in ("bill", "eob", "eob_status", "flags", "explanations", "problems", "warnings")}
             )
             out["user_edited"] = bool(result.get("user_edited"))
+            out["price_context"] = result.get("price_context") or {}
+            out["prices_label"] = result.get("prices_label")
             out["error_message"] = result.get("error_message")
         return out
 
@@ -473,11 +477,18 @@ def create_app(settings: Settings) -> FastAPI:
 def app_from_env() -> FastAPI:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     data_dir = Path(os.environ.get("BILLCHECKER_DATA_DIR", Path.home() / ".billchecker" / "data"))
+    ncci, prices = os.environ.get("BILLCHECKER_NCCI_FILE"), os.environ.get("BILLCHECKER_PRICES_FILE")
+    reference = Reference(
+        pairs=load_pairs(Path(ncci)) if ncci else None,
+        prices=load_prices(Path(prices)) if prices else None,
+        prices_label=os.environ.get("BILLCHECKER_PRICES_LABEL", "Reference price"),
+    )
     return create_app(
         Settings(
             data_dir=data_dir,
             key=load_key(os.environ.get("BILLCHECKER_KEY")),
             llm=make_llm(),
+            reference=reference,
             secure_cookies=os.environ.get("BILLCHECKER_INSECURE_COOKIES") != "1",
         )
     )

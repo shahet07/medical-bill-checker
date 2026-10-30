@@ -279,6 +279,15 @@ def _flag_paragraph(flag: Flag, bill: Bill, eob: Optional[Eob], lines: Dict, eob
             "my account.".format(usd(paid), usd(abs(bill.totals.adjustments)))
         )
 
+    if flag.rule == "unbundled_pair":
+        services = [_service(_lookup(lines, r, flag)) for r in _refs(flag, "bill")]
+        return (
+            "Services usually billed together. These services on the same date are a pair that Medicare's "
+            "National Correct Coding Initiative normally bills as one:\n"
+            + "\n".join("   - " + s for s in services)
+            + "\n   Please confirm whether they should be billed separately on my account."
+        )
+
     if flag.rule == "no_itemization":
         return "The bill shows only a total. Please send an itemized bill listing each service, code, and charge."
 

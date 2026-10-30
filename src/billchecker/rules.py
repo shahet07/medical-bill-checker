@@ -342,9 +342,12 @@ RULES: List[Rule] = [
 NEEDS_ALL_EOBS = {balance_mismatch, not_on_eob, payment_not_applied}
 
 
-def run_rules(bill: Bill, eob: Optional[Eob] = None, eob_complete: bool = True) -> List[Flag]:
+def run_rules(
+    bill: Bill, eob: Optional[Eob] = None, eob_complete: bool = True, extra_rules: Optional[List[Rule]] = None
+) -> List[Flag]:
+    """extra_rules: rules that need optional reference data (see reference.py)."""
     flags: List[Flag] = []
-    for rule in RULES:
+    for rule in RULES + list(extra_rules or []):
         if not eob_complete and rule in NEEDS_ALL_EOBS:
             continue
         flags.extend(rule(bill, eob))
