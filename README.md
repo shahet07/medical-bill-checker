@@ -1,5 +1,7 @@
 # Medical Bill Checker
 
+[![CI](https://github.com/shahet07/medical-bill-checker/actions/workflows/ci.yml/badge.svg)](https://github.com/shahet07/medical-bill-checker/actions/workflows/ci.yml)
+
 MVP per `medical_bill_checker_design.md` and `medical_bill_checker_hld_lld.md`.
 
 ## Status
