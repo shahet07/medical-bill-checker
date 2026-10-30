@@ -3,3 +3,6 @@ __pycache__/
 *.egg-info/
 fixtures/
 .pytest_cache/
+
+# Real deployment secrets
+deploy/.env

@@ -1,0 +1,16 @@
+{$DOMAIN} {
+	encode gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+	# Uploads are capped at 20 MB by the app; leave a little room for form overhead.
+	request_body {
+		max_size 25MB
+	}
+	reverse_proxy app:8000
+	# No access logs: URLs carry case IDs, and nothing else is needed.
+	log {
+		output discard
+	}
+}

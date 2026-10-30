@@ -1,0 +1,35 @@
+# One small server: the app plus Caddy, which gets and renews the HTTPS
+# certificate automatically. Point your domain's DNS at the server first.
+#
+#   cp deploy/.env.example deploy/.env    # then fill it in
+#   docker compose -f deploy/docker-compose.yml up -d --build
+services:
+  app:
+    build: ..
+    env_file: .env
+    volumes:
+      - data:/data
+    restart: unless-stopped
+    # Only Caddy talks to the app; it is not published on the host.
+    expose:
+      - "8000"
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in deploy/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+    restart: unless-stopped
+
+volumes:
+  data:
+  caddy_data:
+  caddy_config:

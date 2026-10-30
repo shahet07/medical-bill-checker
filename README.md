@@ -14,6 +14,13 @@ MVP per `medical_bill_checker_design.md` and `medical_bill_checker_hld_lld.md`.
 - [x] Letters: itemized-bill request and dispute, template-only (`src/billchecker/letters.py`)
 - [x] API: sessions, encrypted 24h storage, background jobs (`src/billchecker/api.py`, `store.py`, `pipeline.py`)
 - [x] Web UI: upload, results, letters, delete (`src/billchecker/web/`)
+- [x] iPhone photos, multi-page photo uploads, several EOBs per bill
+- [x] Feedback per flag and a short survey (`scripts/feedback_report.py`)
+- [x] Letters: dispute, itemized request, financial assistance, payment plan, insurer appeal; PDF download
+- [x] Checks: duplicates, balance, denial, network, itemization, not on EOB, charge mismatch, payment not applied
+- [x] Edit any line or total; glossary; Spanish
+- [x] Optional NCCI unbundling and reference prices (engines only; licensed data not included)
+- [x] Docker + HTTPS deployment (`deploy/DEPLOY.md`)
 
 ## Setup
 
