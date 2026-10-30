@@ -114,7 +114,7 @@ class CaseRunner:
         self._finish(case.case_id, bill_res.data, eob, result)
 
     def _finish(self, case_id: str, bill: Bill, eob: Optional[Eob], result: Dict[str, Any]) -> None:
-        flags = run_rules(bill, eob)
+        flags = run_rules(bill, eob, eob_complete=result.get("eob_status") != "partial")
         expl = explain(bill, flags, self.llm)
         for p in expl.problems:
             log.info("case %s explanation fallback %s", case_id, p)

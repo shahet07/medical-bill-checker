@@ -71,6 +71,7 @@ class Case:
 OFFICE = Row("99213", "Office visit, established patient", "150.00")
 CBC = Row("85025", "Complete blood count", "40.00")
 DRAW = Row("36415", "Venipuncture", "15.00")
+XRAY = Row("71046", "Chest X-ray, 2 views", "120.00")
 
 EOB_OFFICE = EobRow("99213", "150.00", "100.00", "80.00", "20.00")
 EOB_CBC = EobRow("85025", "40.00", "25.00", "10.00", "15.00")
@@ -113,6 +114,27 @@ CASES = [
         ["screenshot"],
     ),
     Case("summary", BillSpec([], billed="1250.00", adjustments="-900.00", balance="350.00"), None, ["no_itemization"]),
+    # The X-ray never reached the insurer, so the patient is billed for all of it.
+    Case(
+        "not_billed",
+        BillSpec([OFFICE, CBC, DRAW, XRAY], adjustments="-165.00", balance="160.00"),
+        CLEAN_EOB,
+        ["balance_mismatch", "not_on_eob"],
+    ),
+    # The office visit is $175.00 on the bill but was billed to the insurer at $150.00.
+    Case(
+        "charge_diff",
+        BillSpec([Row("99213", "Office visit, established patient", "175.00"), CBC, DRAW], adjustments="-190.00", balance="40.00"),
+        CLEAN_EOB,
+        ["charge_mismatch"],
+    ),
+    # The insurer paid, but the bill shows no payment yet.
+    Case(
+        "unpaid",
+        BillSpec([OFFICE, CBC, DRAW], adjustments="0.00", balance="205.00"),
+        CLEAN_EOB,
+        ["balance_mismatch", "payment_not_applied"],
+    ),
 ]
 
 

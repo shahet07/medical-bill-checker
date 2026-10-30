@@ -132,6 +132,9 @@ RuleName = Literal[
     "billed_after_denial",
     "network_mismatch",
     "no_itemization",
+    "not_on_eob",
+    "charge_mismatch",
+    "payment_not_applied",
 ]
 
 

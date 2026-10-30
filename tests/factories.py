@@ -52,7 +52,7 @@ def bill_data(lines: Optional[List[Dict[str, Any]]] = None, **kw: Any) -> Dict[s
         "line_items": [line("L1")] if lines is None else lines,
         "totals": {
             "billed": "150.00",
-            "adjustments": "-50.00",
+            "adjustments": "-130.00",
             "patient_balance": "20.00",
             "source": {"page": 1, "text": "Amount due: $20.00"},
         },

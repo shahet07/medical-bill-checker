@@ -253,3 +253,79 @@ def test_rules_never_raise_on_sparse_data():
     for rule in RULES:
         assert rule(sparse_bill, sparse_eob) == []
         assert rule(sparse_bill, None) == []
+
+
+# --- not_on_eob -----------------------------------------------------------------------
+
+from billchecker.rules import charge_mismatch, not_on_eob, payment_not_applied  # noqa: E402
+
+
+def test_not_on_eob_flags_line_missing_from_covered_date():
+    bill = make_bill([line("L1"), line("L2", code="71046", charge="120.00")])
+    [flag] = not_on_eob(bill, make_eob())
+    assert refs(flag) == [("bill", "L2")]
+    assert flag.severity == "check" and flag.confidence == "medium"
+    assert "71046" in flag.summary and "$120.00" in flag.summary
+
+
+def test_not_on_eob_skips_other_dates_and_unmatchable_lines():
+    other_day = make_bill([line("L1"), line("L2", code="71046", service_date="2026-05-01")])
+    assert not_on_eob(other_day, make_eob()) == []  # probably a different claim
+    rev = make_bill([line("L1"), line("L2", code="0450", code_type="REV")])
+    assert not_on_eob(rev, make_eob()) == []
+    credit = make_bill([line("L1"), line("L2", code="71046", charge="-10.00")])
+    assert not_on_eob(credit, make_eob()) == []
+    assert not_on_eob(make_bill(), None) == []
+
+
+def test_not_on_eob_matches_across_modifiers():
+    assert not_on_eob(make_bill([line("L1", code="99213-25")]), make_eob()) == []
+
+
+# --- charge_mismatch -------------------------------------------------------------------
+
+
+def test_charge_mismatch_flags_different_amount():
+    [flag] = charge_mismatch(make_bill([line("L1", charge="175.00")]), make_eob())
+    assert refs(flag) == [("bill", "L1"), ("eob", "E1")]
+    assert "$175.00" in flag.summary and "$150.00" in flag.summary
+
+
+def test_charge_mismatch_silent_when_equal_unknown_or_ambiguous():
+    assert charge_mismatch(make_bill(), make_eob()) == []
+    assert charge_mismatch(make_bill([line("L1", charge="175.00")]), make_eob([eob_line("E1", billed=None)])) == []
+    two = make_eob([eob_line("E1"), eob_line("E2", billed="175.00")])
+    assert charge_mismatch(make_bill([line("L1", charge="175.00")]), two) == []
+    assert charge_mismatch(make_bill(), None) == []
+
+
+# --- payment_not_applied ---------------------------------------------------------------
+
+
+def test_payment_not_applied_flags_missing_insurer_payment():
+    bill = make_bill(totals=dict(totals("150.00"), adjustments="0.00"))
+    [flag] = payment_not_applied(bill, make_eob())
+    assert flag.severity == "review"
+    assert "$80.00" in flag.summary and "$0.00" in flag.summary
+    assert refs(flag) == [("bill", "totals"), ("eob", "E1")]
+
+
+def test_payment_not_applied_silent_when_shown_or_unknown():
+    assert payment_not_applied(make_bill(), make_eob()) == []  # 130 shown >= 80 paid
+    no_adj = make_bill(totals=dict(totals("150.00"), adjustments=None))
+    assert payment_not_applied(no_adj, make_eob()) == []
+    unknown_paid = make_eob([eob_line("E1", insurer_paid=None)])
+    assert payment_not_applied(make_bill(totals=dict(totals("150.00"), adjustments="0.00")), unknown_paid) == []
+
+
+def test_payment_not_applied_needs_eob_to_cover_bill_dates():
+    bill = make_bill([line("L1"), line("L2", code="71046", service_date="2026-05-01")], totals=dict(totals("150.00"), adjustments="0.00"))
+    assert payment_not_applied(bill, make_eob()) == []
+
+
+def test_incomplete_eobs_skip_whole_claim_rules():
+    bill = make_bill([line("L1"), line("L2", code="71046", charge="120.00")], totals=dict(totals("140.00"), adjustments="0.00"))
+    assert sorted(f.rule for f in run_rules(bill, make_eob())) == ["balance_mismatch", "not_on_eob", "payment_not_applied"]
+    assert run_rules(bill, make_eob(), eob_complete=False) == []
+    denied = make_eob([eob_line("E1", status="denied")])
+    assert [f.rule for f in run_rules(bill, denied, eob_complete=False)] == ["billed_after_denial"]

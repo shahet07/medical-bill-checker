@@ -254,6 +254,31 @@ def _flag_paragraph(flag: Flag, bill: Bill, eob: Optional[Eob], lines: Dict, eob
             "adjust the bill to match.".format(marker.text if marker else "out of network")
         )
 
+    if flag.rule == "not_on_eob":
+        [line] = [_lookup(lines, r, flag) for r in _refs(flag, "bill")]
+        return (
+            "Service not on my insurance EOB: {}. My EOB for this date does not list this service. "
+            "Please confirm whether it was billed to my insurance, and if not, please submit it.".format(_service(line))
+        )
+
+    if flag.rule == "charge_mismatch":
+        [line] = [_lookup(lines, r, flag) for r in _refs(flag, "bill")]
+        [claimed] = [_lookup(eob_lines, r, flag) for r in _refs(flag, "eob")]
+        return (
+            "Charge differs from the amount billed to my insurer: {}. My EOB shows this service was billed "
+            "to my insurer at {}. Please explain the difference.".format(_service(line), usd(claimed.billed))
+        )
+
+    if flag.rule == "payment_not_applied":
+        if eob is None:
+            raise ValueError("payment_not_applied flag without an EOB")
+        paid = sum((sl.insurer_paid for sl in eob.service_lines if sl.insurer_paid), Decimal("0"))
+        return (
+            "Insurance payment not shown. My EOB shows my insurer paid {} on this claim, but this bill shows "
+            "{} in payments and adjustments. Please confirm that the insurance payment has been applied to "
+            "my account.".format(usd(paid), usd(abs(bill.totals.adjustments)))
+        )
+
     if flag.rule == "no_itemization":
         return "The bill shows only a total. Please send an itemized bill listing each service, code, and charge."
 

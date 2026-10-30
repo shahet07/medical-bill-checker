@@ -32,6 +32,7 @@ def allowed_amounts(bill, eob):
     if eob:
         for sl in eob.service_lines:
             vals |= {sl.billed, sl.allowed, sl.insurer_paid, sl.patient_responsibility}
+        vals.add(sum((sl.insurer_paid for sl in eob.service_lines if sl.insurer_paid), Decimal("0")))
         vals.add(eob.totals.patient_responsibility)
         if bill.totals.patient_balance is not None and eob.totals.patient_responsibility is not None:
             vals.add(bill.totals.patient_balance - eob.totals.patient_responsibility)

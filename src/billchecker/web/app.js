@@ -16,6 +16,9 @@ const RULE_TITLES = {
   billed_after_denial: "Billed for a service your insurer denied",
   network_mismatch: "Out-of-network billing for in-network care",
   no_itemization: "No itemized list of charges",
+  not_on_eob: "Service not on your insurance statement",
+  charge_mismatch: "Charge differs from what your insurer was billed",
+  payment_not_applied: "Insurance payment may not be applied",
 };
 const CONFIDENCE = { high: "Strong signal", medium: "Worth a look", low: "Weak signal" };
 const FAILED_TEXT = {
@@ -251,7 +254,7 @@ function renderResults(c) {
   const eobNote = $("#eob-note");
   eobNote.hidden = c.eob_status !== "unreadable" && c.eob_status !== "partial";
   eobNote.textContent = c.eob_status === "partial"
-    ? "We could not read one of your EOBs, so the comparison may be incomplete. Try uploading a clearer copy."
+    ? "We could not read one of your EOBs, so checks that compare the whole bill with your insurance were skipped. Try uploading a clearer copy."
     : "We could not read your EOB, so the bill was checked on its own. Try uploading a clearer copy to compare them.";
   $("#warning-note").hidden = !(c.warnings && c.warnings.length) && bill.extraction_confidence !== "low";
 

@@ -224,17 +224,128 @@ def no_itemization(bill: Bill, eob: Optional[Eob]) -> List[Flag]:
     return [_make_flag("no_itemization", "check", "high", summary, evidence)]
 
 
+def _eob_index(eob: Eob) -> Dict[Tuple, List[EobLine]]:
+    index: Dict[Tuple, List[EobLine]] = defaultdict(list)
+    for sl in eob.service_lines:
+        code = match_code(sl.code)
+        if sl.service_date and code:
+            index[(sl.service_date, code)].append(sl)
+    return index
+
+
+def _matchable(line: LineItem) -> Optional[Tuple]:
+    code = match_code(line.code, line.code_type)
+    if line.service_date is None or code is None or line.charge <= 0:
+        return None
+    return (line.service_date, code)
+
+
+def not_on_eob(bill: Bill, eob: Optional[Eob]) -> List[Flag]:
+    """A bill line the EOB does not list, on a date the EOB does cover.
+
+    Requiring the EOB to have other services on that date avoids flagging
+    lines that simply belong to a different claim.
+    """
+    if eob is None:
+        return []
+    index = _eob_index(eob)
+    eob_dates = {sl.service_date for sl in eob.service_lines if sl.service_date}
+    flags = []
+    for line in bill.line_items:
+        key = _matchable(line)
+        if key is None or key in index or key[0] not in eob_dates:
+            continue
+        summary = (
+            "Line {} ({}, {}, {}) is on your bill, but your insurance EOB does not list it for that date. "
+            "It may not have been sent to your insurance. This needs checking.".format(
+                line.line_id, line.code, line.service_date.isoformat(), _money(line.charge)
+            )
+        )
+        flags.append(_make_flag("not_on_eob", "check", "medium", summary, [_bill_line_evidence(line)]))
+    return flags
+
+
+def charge_mismatch(bill: Bill, eob: Optional[Eob]) -> List[Flag]:
+    """The bill's charge for a service differs from what the EOB says was billed to the insurer."""
+    if eob is None:
+        return []
+    index = _eob_index(eob)
+    flags = []
+    for line in bill.line_items:
+        key = _matchable(line)
+        matches = index.get(key, []) if key else []
+        # Only a single unambiguous match with a known billed amount.
+        if len(matches) != 1 or matches[0].billed is None:
+            continue
+        claimed = matches[0].billed
+        if abs(claimed - line.charge) <= BALANCE_TOLERANCE:
+            continue
+        summary = (
+            "Line {} ({}, {}) shows a charge of {}, but your EOB says the provider billed your insurer {} "
+            "for this service. This needs checking.".format(
+                line.line_id, line.code, line.service_date.isoformat(), _money(line.charge), _money(claimed)
+            )
+        )
+        evidence = [_bill_line_evidence(line), _eob_line_evidence(matches[0])]
+        flags.append(_make_flag("charge_mismatch", "check", "medium", summary, evidence))
+    return flags
+
+
+def payment_not_applied(bill: Bill, eob: Optional[Eob]) -> List[Flag]:
+    """The EOB shows the insurer paid more than the bill shows in payments and adjustments."""
+    if eob is None or bill.totals.adjustments is None:
+        return []
+    paid = [sl.insurer_paid for sl in eob.service_lines]
+    if not paid or any(p is None for p in paid):
+        return []
+    insurer_paid = sum(paid, Decimal("0"))
+    shown = abs(bill.totals.adjustments)
+    if insurer_paid <= 0 or shown >= insurer_paid - BALANCE_TOLERANCE:
+        return []
+    # Only when the EOB covers every service date on the bill (same visit).
+    bill_dates = {li.service_date for li in bill.line_items if li.service_date}
+    eob_dates = {sl.service_date for sl in eob.service_lines if sl.service_date}
+    if not bill_dates or not bill_dates <= eob_dates:
+        return []
+    src = bill.totals.source
+    evidence = [
+        Evidence(
+            source="bill",
+            ref="totals",
+            page=src.page if src else None,
+            text="Payments and adjustments: {}".format(_money(bill.totals.adjustments)),
+        )
+    ] + [_eob_line_evidence(sl) for sl in eob.service_lines if sl.insurer_paid]
+    summary = (
+        "Your EOB shows your insurer paid {}, but this bill shows only {} in payments and adjustments. "
+        "The insurance payment may not have been applied yet. This needs checking.".format(
+            _money(insurer_paid), _money(shown)
+        )
+    )
+    return [_make_flag("payment_not_applied", "review", "medium", summary, evidence)]
+
+
 RULES: List[Rule] = [
     duplicate_line,
     balance_mismatch,
     billed_after_denial,
     network_mismatch,
     no_itemization,
+    not_on_eob,
+    charge_mismatch,
+    payment_not_applied,
 ]
 
 
-def run_rules(bill: Bill, eob: Optional[Eob] = None) -> List[Flag]:
+# Rules that compare the bill against the EOBs as a whole. If some EOBs could
+# not be read, these would compare against an incomplete picture, so they are skipped.
+NEEDS_ALL_EOBS = {balance_mismatch, not_on_eob, payment_not_applied}
+
+
+def run_rules(bill: Bill, eob: Optional[Eob] = None, eob_complete: bool = True) -> List[Flag]:
     flags: List[Flag] = []
     for rule in RULES:
+        if not eob_complete and rule in NEEDS_ALL_EOBS:
+            continue
         flags.extend(rule(bill, eob))
     return flags

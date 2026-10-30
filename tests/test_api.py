@@ -361,7 +361,9 @@ def test_one_unreadable_eob_of_two_is_partial(client, llm):
     case_id = client.post("/api/cases", json={"bill_upload_id": bill_id, "eob_upload_ids": eob_ids}).json()["case_id"]
     got = client.get("/api/cases/" + case_id).json()
     assert got["eob_status"] == "partial"
-    assert [f["rule"] for f in got["flags"]] == ["balance_mismatch"]  # 35 of 40 found
+    # Only 35 of the 40 owed is on the readable EOB and the blood draw is on the unreadable one,
+    # so whole-claim checks are skipped rather than raising false flags.
+    assert got["flags"] == []
 
 
 def test_too_many_eobs_rejected(client):
