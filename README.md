@@ -12,7 +12,8 @@ MVP per `medical_bill_checker_design.md` and `medical_bill_checker_hld_lld.md`.
 - [x] Synthetic test documents and a live extraction eval
 - [x] Plain-language explanations with per-item guardrails (`src/billchecker/explanation.py`)
 - [x] Letters: itemized-bill request and dispute, template-only (`src/billchecker/letters.py`)
-- [ ] API and UI
+- [x] API: sessions, encrypted 24h storage, background jobs (`src/billchecker/api.py`, `store.py`, `pipeline.py`)
+- [ ] Web UI
 
 ## Setup
 
@@ -21,6 +22,38 @@ python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 .venv/bin/python -m pytest          # no network, no cost
 ```
+
+## Running the API
+
+```sh
+export BILLCHECKER_KEY=$(.venv/bin/python -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())")
+export GEMINI_API_KEY=...
+export BILLCHECKER_INSECURE_COOKIES=1   # local http only; never in production
+.venv/bin/uvicorn --factory billchecker.api:app_from_env --port 8765
+```
+
+Keep `BILLCHECKER_KEY` outside the repo. If you lose it, you can no longer read stored data, which is acceptable because everything expires within 24 hours. Data is stored in `~/.billchecker/data`; change it with `BILLCHECKER_DATA_DIR`.
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/api/uploads` | Multipart `kind` (`bill`/`eob`) + `file`. Validated immediately (type, size, pages, readable). |
+| POST | `/api/cases` | `{bill_upload_id, eob_upload_id?}`. Starts the background job. |
+| GET | `/api/cases/{id}` | Status (`queued`, `extracting`, `needs_confirmation`, `ready`, `failed`), data, flags, explanations |
+| POST | `/api/cases/{id}/confirm` | `{billed?, patient_balance?}` when totals need confirming |
+| POST | `/api/cases/{id}/letter` | `{kind, patient, flag_ids?, note?}`. Patient details are not stored. |
+| DELETE | `/api/cases/{id}` | Deletes the case and its uploads immediately |
+
+Security:
+- Anonymous session cookie (HttpOnly, Secure, SameSite=Strict). Stored only as a hash.
+- Other sessions' IDs return 404.
+- Files are encrypted with AES-256-GCM and named by random IDs.
+- The SQLite index holds no document content.
+- Everything expires after 24 hours, with an hourly cleanup.
+- Per-session rate limits.
+- Logs contain only IDs and statuses. pdfminer's debug logging is silenced because it prints page text.
+- No `/docs` or OpenAPI endpoint.
+
+If the LLM is unreachable or out of quota, the case goes back to `queued` and is retried every 60 seconds, up to 5 attempts.
 
 ## Test documents
 

@@ -5,6 +5,7 @@ Pages without one (scans) and photos are sent as images.
 """
 
 import io
+import logging
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -21,6 +22,8 @@ MIN_TEXT_CHARS = 40
 MAX_IMAGE_EDGE = 1568
 PDF_RENDER_SCALE = 2.0  # 144 dpi
 Image.MAX_IMAGE_PIXELS = 60_000_000
+# pdfminer logs page content at DEBUG; keep document text out of logs at any app log level.
+logging.getLogger("pdfminer").setLevel(logging.WARNING)
 
 
 class IngestError(Exception):
