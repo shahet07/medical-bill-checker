@@ -1,4 +1,6 @@
-# Medical Bill Checker
+# Clyvexa
+
+**Know what you owe.** Clyvexa is a medical bill checker. It explains your bill, compares it with your insurance EOB, flags what's worth asking about, and writes the letter.
 
 [![CI](https://github.com/shahet07/medical-bill-checker/actions/workflows/ci.yml/badge.svg)](https://github.com/shahet07/medical-bill-checker/actions/workflows/ci.yml)
 

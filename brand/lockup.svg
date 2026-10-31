@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 300" role="img" aria-label="Medical Bill Checker"><defs>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 300" role="img" aria-label="Clyvexa, medical bill checker"><defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#2b6fd6"/>
       <stop offset="1" stop-color="#1a4fa3"/>
@@ -19,4 +19,4 @@
     <!-- checked: green badge -->
     <circle cx="352" cy="358" r="86" fill="#1f9d5c" stroke="#1d55ad" stroke-width="16"/>
     <path d="M311 359l28 28 56-58" fill="none" stroke="#ffffff" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
-  </g></g><text x="320" y="138" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="96" font-weight="800" fill="#1c2430" letter-spacing="-1">Medical Bill</text><text x="320" y="238" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="96" font-weight="800" fill="#1f5fbf" letter-spacing="-1">Checker</text></svg>
+  </g></g><text x="320" y="168" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="128" font-weight="800" fill="#1c2430" letter-spacing="-2">Clyvexa</text><text x="324" y="236" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="44" font-weight="600" fill="#1f5fbf" letter-spacing="1">Medical bill checker</text></svg>

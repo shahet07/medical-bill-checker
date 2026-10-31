@@ -1,10 +1,10 @@
-# Brand
+# Brand: Clyvexa
 
 | File | Use |
 |---|---|
 | `mark.svg` | The logo mark (rounded square). Source for the web icons |
 | `mark-maskable.svg` | Full-bleed version with the art inside Android's safe zone |
-| `lockup.svg` / `lockup.png` | Logo with the name, for documents and the store listing |
+| `lockup.svg` / `lockup.png` | Clyvexa wordmark with "Medical bill checker", for documents and the store listing |
 | `play-store-icon-512.png` | Google Play icon: 512×512, full-bleed (Play applies the rounded mask) |
 | `preview.png` | The icon at real sizes, on light and dark, with Android masks |
 

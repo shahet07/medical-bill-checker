@@ -33,8 +33,8 @@ def main() -> None:
             page.close()
             print("wrote", out.relative_to(BRAND.parent))
         # Lockup (wordmark) at 2x.
-        page = browser.new_page(viewport={"width": 1240, "height": 300}, device_scale_factor=2)
-        page.set_content('<html><body style="margin:0;background:transparent">' + (BRAND / "lockup.svg").read_text().replace("<svg ", '<svg width="1240" height="300" ', 1) + "</body></html>")
+        page = browser.new_page(viewport={"width": 700, "height": 300}, device_scale_factor=2)
+        page.set_content('<html><body style="margin:0;background:transparent">' + (BRAND / "lockup.svg").read_text().replace("<svg ", '<svg width="700" height="300" ', 1) + "</body></html>")
         page.screenshot(path=str(BRAND / "lockup.png"), omit_background=True)
         print("wrote brand/lockup.png")
         browser.close()

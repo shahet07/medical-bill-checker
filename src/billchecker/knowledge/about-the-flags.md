@@ -1,6 +1,6 @@
 ---
 title: What the checks in this tool mean
-sources: Medical Bill Checker | https://github.com/shahet07/medical-bill-checker
+sources: Clyvexa | https://github.com/shahet07/medical-bill-checker
 ---
 ## Flags are questions, not errors
 Each flag is something worth asking the billing office about. A flag is not proof that the bill is wrong. The evidence shown with each flag is copied from your bill or EOB so you can check it yourself.

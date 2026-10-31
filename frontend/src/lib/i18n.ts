@@ -3,7 +3,7 @@
 export type Lang = "en" | "es";
 
 export const STATIC_EN: Record<string, string> = {
-  "app_title": "Medical Bill Checker",
+  "app_title": "Clyvexa",
   "my_account": "My account",
   "log_out": "Log out",
   "tagline": "Understand your medical bill, compare it with your insurance statement, and get a letter to send if something needs checking.",
@@ -122,7 +122,7 @@ export const STATIC_EN: Record<string, string> = {
 // go to US billing offices and insurers.
 
 export const STATIC_ES: Record<string, string> = {
-  app_title: "Revisor de Facturas Médicas",
+  app_title: "Clyvexa",
   tagline: "Entienda su factura médica, compárela con el estado de cuenta de su seguro y obtenga una carta para enviar si algo necesita revisión.",
   upload_title: "Suba su factura",
   bill_label: "Factura médica",

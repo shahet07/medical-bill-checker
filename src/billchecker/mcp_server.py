@@ -145,7 +145,7 @@ def build_server(
 ) -> MCPServer:
     server = MCPServer(
         name="billchecker",
-        title="Medical Bill Checker",
+        title="Clyvexa: Medical Bill Checker",
         description="Check medical bills against insurance EOBs, explain them, and write letters.",
         instructions=INSTRUCTIONS,
         version="0.1.0",

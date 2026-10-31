@@ -1,4 +1,4 @@
-# Medical Bill Checker: API + web UI in one process.
+# Clyvexa (medical bill checker): API + web UI in one process.
 # Run exactly one container: background jobs and rate limits live in-process.
 
 # 1. Build the Next.js frontend as static files.

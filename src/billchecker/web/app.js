@@ -1,4 +1,4 @@
-// Medical Bill Checker front end. No dependencies.
+// Clyvexa (medical bill checker) front end. No dependencies.
 // Every value from the server or a document is inserted with textContent
 // (via el()), never as HTML, so bill text cannot run as code.
 "use strict";

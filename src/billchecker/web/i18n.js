@@ -5,7 +5,7 @@
 "use strict";
 
 const STATIC_ES = {
-  app_title: "Revisor de Facturas Médicas",
+  app_title: "Clyvexa",
   tagline: "Entienda su factura médica, compárela con el estado de cuenta de su seguro y obtenga una carta para enviar si algo necesita revisión.",
   upload_title: "Suba su factura",
   bill_label: "Factura médica",

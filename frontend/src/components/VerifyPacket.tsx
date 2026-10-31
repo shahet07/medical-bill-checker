@@ -127,8 +127,8 @@ export default function VerifyPacket() {
             <h2>{valid ? "✓ Signature valid" : "✗ Signature does not match"}</h2>
             <p>
               {valid
-                ? "This record was issued by Medical Bill Checker and has not been altered since."
-                : "This record has been altered or was not issued by Medical Bill Checker. Do not rely on it."}{" "}
+                ? "This record was issued by Clyvexa and has not been altered since."
+                : "This record has been altered or was not issued by Clyvexa. Do not rely on it."}{" "}
               <span className="muted">
                 Checked {browserCheck === null ? "by the server" : "in your browser"} with Ed25519.
               </span>

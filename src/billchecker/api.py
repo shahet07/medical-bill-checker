@@ -352,7 +352,7 @@ def create_app(settings: Settings) -> FastAPI:
         runner.shutdown()
         store.close()
 
-    app = FastAPI(title="Medical Bill Checker", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(title="Clyvexa", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.store = store
     app.state.runner = runner
 
