@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Figtree, Fraunces } from "next/font/google";
+import { at } from "@/lib/base";
 import "./globals.css";
 import "./site.css";
 
@@ -12,11 +13,11 @@ export const metadata: Metadata = {
   description: "Understand your medical bill, compare it with your insurance statement, and get a letter to send.",
   icons: {
     icon: [
-      { url: "/icon.svg", type: "image/svg+xml" },
-      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
-      { url: "/favicon-48.png", sizes: "48x48", type: "image/png" },
+      { url: at("/icon.svg"), type: "image/svg+xml" },
+      { url: at("/favicon-32.png"), sizes: "32x32", type: "image/png" },
+      { url: at("/favicon-48.png"), sizes: "48x48", type: "image/png" },
     ],
-    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+    apple: [{ url: at("/apple-touch-icon.png"), sizes: "180x180" }],
   },
 };
 

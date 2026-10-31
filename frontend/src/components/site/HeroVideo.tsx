@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { at } from "@/lib/base";
 
 /** Full-bleed, muted background video for the hero, with a pause button. Stays on its poster
  * for visitors who ask for reduced motion. If the files are missing, the hero's gradient shows. */
@@ -34,13 +35,13 @@ export default function HeroVideo(props: { pauseLabel: string; playLabel: string
         loop
         playsInline
         preload="metadata"
-        poster="/media/hero-poster.jpg"
+        poster={at("/media/hero-poster.jpg")}
         aria-hidden="true"
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
       >
-        <source src="/media/hero-360.mp4" type="video/mp4" media="(max-width: 700px)" />
-        <source src="/media/hero-720.mp4" type="video/mp4" />
+        <source src={at("/media/hero-360.mp4")} type="video/mp4" media="(max-width: 700px)" />
+        <source src={at("/media/hero-720.mp4")} type="video/mp4" />
       </video>
       <div className="hero-shade" aria-hidden="true" />
       <button type="button" className="video-toggle" onClick={toggle} aria-label={playing ? props.pauseLabel : props.playLabel} aria-pressed={!playing}>

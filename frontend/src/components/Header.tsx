@@ -2,6 +2,7 @@
 
 import { useApp } from "@/lib/app";
 import type { User } from "@/lib/types";
+import { at } from "@/lib/base";
 
 export default function Header(props: {
   user: User | null;
@@ -17,8 +18,8 @@ export default function Header(props: {
       <div className="wrap">
         <div className="header-row">
           <h1>
-            <a href="/" className="brand home-link">
-              <img src="/icon.svg" alt="" width={40} height={40} className="brand-mark" />
+            <a href={at("/")} className="brand home-link">
+              <img src={at("/icon.svg")} alt="" width={40} height={40} className="brand-mark" />
               <span>{ts("app_title")}</span>
             </a>
           </h1>

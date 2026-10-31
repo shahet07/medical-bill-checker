@@ -8,6 +8,7 @@ import Journey from "./Journey";
 import Icon from "./Icon";
 import { CountUp, useReveal } from "./motion";
 import { SiteFooter, SiteHeader, useSiteLang } from "./SiteChrome";
+import { at } from "@/lib/base";
 
 const PRIVACY_ICONS = ["lock", "clock", "trash", "user", "device"];
 
@@ -38,7 +39,7 @@ export default function Landing() {
               </h1>
               <p className="lead">{s.hero.lead}</p>
               <div className="hero-actions">
-                <a href="/app" className="pill-btn light">
+                <a href={at("/app")} className="pill-btn light">
                   {s.hero.cta} <span className="arrow-dot" aria-hidden="true">→</span>
                 </a>
                 <a href="#how" className="pill-btn outline">
@@ -103,7 +104,7 @@ export default function Landing() {
           <div className="site-wrap band-grid">
             <div className="reveal">
               <span className="band-mark">
-                <img src="/icon.svg" alt="" width={52} height={52} />
+                <img src={at("/icon.svg")} alt="" width={52} height={52} />
               </span>
               <p className="band-label">{s.mission.label}</p>
               <blockquote className="display quote">{s.mission.quote}</blockquote>
@@ -134,7 +135,7 @@ export default function Landing() {
               </svg>
               <h2 className="display">{s.privacy.title}</h2>
               <p className="lead">{s.privacy.lead}</p>
-              <a href="/privacy" className="circle-link">
+              <a href={at("/privacy")} className="circle-link">
                 {s.privacy.link} <span aria-hidden="true">→</span>
               </a>
             </div>
@@ -185,7 +186,7 @@ export default function Landing() {
           <div className="site-wrap finale-inner reveal">
             <h2 className="display">{s.cta.title}</h2>
             <p className="lead">{s.cta.body}</p>
-            <a href="/app" className="pill-btn light big">
+            <a href={at("/app")} className="pill-btn light big">
               {s.cta.button} <span className="arrow-dot" aria-hidden="true">→</span>
             </a>
             <ul className="glass-pills center">

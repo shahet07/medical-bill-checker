@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import LegalPage from "@/components/site/LegalPage";
+import { at } from "@/lib/base";
 
 export const metadata: Metadata = { title: "Delete your account · Clyvexa" };
 
@@ -9,7 +10,7 @@ export default function DeleteAccount() {
       <h2>In the app (immediate)</h2>
       <ol>
         <li>
-          <a href="/app">Open Clyvexa</a> and log in.
+          <a href={at("/app")}>Open Clyvexa</a> and log in.
         </li>
         <li>Choose &ldquo;My account&rdquo; at the top of the page.</li>
         <li>Choose &ldquo;Delete my account&rdquo; and confirm.</li>
@@ -41,7 +42,7 @@ export default function DeleteAccount() {
       </ul>
       <p>
         To delete just one bill instead, open it from your history and choose &ldquo;Delete&rdquo;. See the{" "}
-        <a href="/privacy">privacy policy</a> for more.
+        <a href={at("/privacy")}>privacy policy</a> for more.
       </p>
     </LegalPage>
   );

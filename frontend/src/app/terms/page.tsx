@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import LegalPage from "@/components/site/LegalPage";
+import { at } from "@/lib/base";
 
 export const metadata: Metadata = { title: "Terms of use · Clyvexa" };
 
@@ -44,7 +45,7 @@ export default function Terms() {
         </li>
         <li>
           Your documents stay yours. You let us process them only to provide the service, as the{" "}
-          <a href="/privacy">privacy policy</a> describes.
+          <a href={at("/privacy")}>privacy policy</a> describes.
         </li>
       </ul>
 
@@ -69,7 +70,7 @@ export default function Terms() {
 
       <h2>Ending your use</h2>
       <p>
-        You can stop at any time and <a href="/delete-account">delete your account</a>. We may change or stop the
+        You can stop at any time and <a href={at("/delete-account")}>delete your account</a>. We may change or stop the
         service; if we stop it, we will give notice so you can save your letters first.
       </p>
 

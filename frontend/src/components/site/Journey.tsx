@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { SiteText } from "@/lib/siteText";
+import { at } from "@/lib/base";
 
 // "How it works" as a bill's journey through an isometric town: a big time,
 // the logo pin moving between places along a path, a phone showing that
@@ -164,7 +165,7 @@ function Scene({ step }: { step: number }) {
         <g className="bob">
           <path d="M0 -6 L-9 -22 H9 Z" className="stem" />
           <rect x="-30" y="-82" width="60" height="60" rx="18" className="bubble" />
-          <image href="/icon.svg" x="-21" y="-73" width="42" height="42" />
+          <image href={at("/icon.svg")} x="-21" y="-73" width="42" height="42" />
         </g>
       </g>
     </svg>

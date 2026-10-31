@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import LegalPage from "@/components/site/LegalPage";
+import { at } from "@/lib/base";
 
 export const metadata: Metadata = { title: "Privacy policy · Clyvexa" };
 
@@ -103,7 +104,7 @@ export default function Privacy() {
         </li>
       </ul>
       <p>
-        See also <a href="/delete-account">how to delete your account</a>.
+        See also <a href={at("/delete-account")}>how to delete your account</a>.
       </p>
 
       <h2>Children</h2>

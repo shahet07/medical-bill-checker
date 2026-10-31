@@ -3,10 +3,11 @@
 // letterboxed to 192px, and the highest-contrast 192px tile at 1024px scale.
 
 import { Manifest, SIZE, buildModel, loadWeights, logits } from "./photoModel";
+import { at } from "./base";
 
 const DETAIL_EDGE = 1024;
 const STRIDE = 96;
-const BASE = "/models/photo-quality/";
+const BASE = at("/models/photo-quality/");
 
 export interface DeviceCheck {
   issues: string[];

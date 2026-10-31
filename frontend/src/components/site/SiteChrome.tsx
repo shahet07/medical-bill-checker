@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Lang } from "@/lib/i18n";
 import { SITE_TEXT, SiteText } from "@/lib/siteText";
+import { at } from "@/lib/base";
 
 const LANG_KEY = "billchecker.lang"; // shared with the app, so the choice carries over
 export const SOURCE_URL = "https://github.com/shahet07/medical-bill-checker";
@@ -32,7 +33,7 @@ export function useSiteLang(): [Lang, (l: Lang) => void] {
 
 export function SiteHeader(props: { text: SiteText; lang?: Lang; onToggleLang?: () => void; sections?: boolean }) {
   const { text, sections } = props;
-  const anchor = (id: string) => (sections ? "#" + id : "/#" + id);
+  const anchor = (id: string) => (sections ? "#" + id : at("/#" + id));
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -43,8 +44,8 @@ export function SiteHeader(props: { text: SiteText; lang?: Lang; onToggleLang?: 
   return (
     <header className={"site-nav" + (scrolled ? " scrolled" : "") + (sections ? " overlay" : "")}>
       <div className="site-wrap site-nav-row">
-        <a href="/" className="brand site-brand" aria-label="Clyvexa home">
-          <img src="/icon.svg" alt="" width={36} height={36} className="brand-mark" />
+        <a href={at("/")} className="brand site-brand" aria-label="Clyvexa home">
+          <img src={at("/icon.svg")} alt="" width={36} height={36} className="brand-mark" />
           <span className="brand-name">
             Clyvexa<small>{text.hero.eyebrow}</small>
           </span>
@@ -61,7 +62,7 @@ export function SiteHeader(props: { text: SiteText; lang?: Lang; onToggleLang?: 
               {text.langToggle}
             </button>
           )}
-          <a href="/app" className="pill-btn solid">
+          <a href={at("/app")} className="pill-btn solid">
             {text.nav.open}
           </a>
         </div>
@@ -78,25 +79,25 @@ export function SiteFooter(props: { text: SiteText }) {
       <div className="site-wrap">
         <div className="site-foot-row">
           <div className="site-foot-brand">
-            <a href="/" className="brand site-brand">
-              <img src="/icon.svg" alt="" width={36} height={36} className="brand-mark" />
+            <a href={at("/")} className="brand site-brand">
+              <img src={at("/icon.svg")} alt="" width={36} height={36} className="brand-mark" />
               <span>Clyvexa</span>
             </a>
             <p>{f.tagline}</p>
           </div>
           <nav aria-label={f.product} className="site-foot-col">
             <h2>{f.product}</h2>
-            <a href="/app">{n.open}</a>
-            <a href="/#how">{n.how}</a>
-            <a href="/#features">{n.features}</a>
-            <a href="/#faq">{n.faq}</a>
+            <a href={at("/app")}>{n.open}</a>
+            <a href={at("/#how")}>{n.how}</a>
+            <a href={at("/#features")}>{n.features}</a>
+            <a href={at("/#faq")}>{n.faq}</a>
           </nav>
           <nav aria-label={f.trust} className="site-foot-col">
             <h2>{f.trust}</h2>
-            <a href="/privacy">{f.privacy}</a>
-            <a href="/terms">{f.terms}</a>
-            <a href="/delete-account">{f.deletion}</a>
-            <a href="/verify">{f.verify}</a>
+            <a href={at("/privacy")}>{f.privacy}</a>
+            <a href={at("/terms")}>{f.terms}</a>
+            <a href={at("/delete-account")}>{f.deletion}</a>
+            <a href={at("/verify")}>{f.verify}</a>
           </nav>
           <nav aria-label={f.openSource} className="site-foot-col">
             <h2>{f.openSource}</h2>
