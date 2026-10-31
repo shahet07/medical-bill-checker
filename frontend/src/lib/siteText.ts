@@ -28,13 +28,12 @@ export interface SiteText {
     refund: Titled & { found: string; amount: string };
     radar: Titled & { rows: string[]; reports: string; note: string };
   };
-  how: {
+  journey: {
     label: string;
     title: string;
-    steps: Titled[];
-    upload: { files: string[]; ok: string };
-    confirm: { edit: string; button: string };
-    act: { letter: string; greeting: string; pdf: string; copy: string };
+    example: string;
+    stops: { time: string; short: string; title: string; place: string; head: string; big: string; sub: string; ok: string }[];
+    reply: string;
   };
   checks: { title: string; lead: string; items: Titled[] };
   mission: { label: string; quote: string; body: string };
@@ -118,17 +117,19 @@ const en: SiteText = {
       note: "Shown only after 10+ people report it",
     },
   },
-  how: {
+  journey: {
     label: "How it works",
-    title: "From photo to letter in a few minutes.",
-    steps: [
-      { title: "Upload", body: "Add your bill as a PDF or photos, one per page, and the EOB from your insurer if you have it. A quick check on your device tells you if a photo is too blurry, dark or cut off." },
-      { title: "Confirm", body: "Clyvexa reads the totals and every line. You see what it read and can fix anything before it checks." },
-      { title: "Act", body: "Get each finding with the lines it's based on, a plain-language explanation, and a ready-to-send letter as text or PDF." },
+    title: "One bill, start to finish.",
+    example: "Example",
+    stops: [
+      { time: "6:40 PM", short: "6:40 PM", title: "The bill arrives", place: "Home · Mailbox", head: "Example Medical Center", big: "$412.00", sub: "Amount due", ok: "" },
+      { time: "6:44 PM", short: "6:44 PM", title: "Find your EOB", place: "Insurer · Member website", head: "Explanation of Benefits", big: "$96.40", sub: "What you owe", ok: "Downloaded" },
+      { time: "6:50 PM", short: "6:50 PM", title: "Snap a photo", place: "Kitchen table · Phone", head: "Photo check", big: "", sub: "", ok: "Clear photo" },
+      { time: "6:53 PM", short: "6:53 PM", title: "Two things to check", place: "Clyvexa", head: "", big: "", sub: "", ok: "" },
+      { time: "9:05 AM", short: "9:05 AM", title: "Make the call", place: "Billing office · Next morning", head: "", big: "", sub: "", ok: "" },
+      { time: "3 weeks later", short: "+3 weeks", title: "A corrected bill", place: "Home · Mailbox", head: "Updated statement", big: "$96.40", sub: "Amount due", ok: "Matches your EOB" },
     ],
-    upload: { files: ["bill-page-1.jpg", "bill-page-2.jpg", "eob-march.pdf"], ok: "Clear" },
-    confirm: { edit: "Edit", button: "Looks right, check it" },
-    act: { letter: "Dispute letter", greeting: "To the billing department,", pdf: "Download PDF", copy: "Copy text" },
+    reply: "I can see the duplicate. I'll correct it.",
   },
   checks: {
     title: "What it checks",
@@ -286,17 +287,19 @@ const es: SiteText = {
       note: "Solo se muestra con 10+ reportes",
     },
   },
-  how: {
+  journey: {
     label: "Cómo funciona",
-    title: "De una foto a una carta en pocos minutos.",
-    steps: [
-      { title: "Suba", body: "Agregue su factura en PDF o fotos, una por página, y la EOB de su seguro si la tiene. Una revisión rápida en su dispositivo le avisa si una foto está borrosa, oscura o cortada." },
-      { title: "Confirme", body: "Clyvexa lee los totales y cada línea. Usted ve lo que leyó y puede corregir cualquier cosa antes de la revisión." },
-      { title: "Actúe", body: "Reciba cada hallazgo con las líneas en que se basa, una explicación sencilla y una carta lista para enviar, en texto o PDF." },
+    title: "Una factura, de principio a fin.",
+    example: "Ejemplo",
+    stops: [
+      { time: "6:40 p. m.", short: "6:40 p. m.", title: "Llega la factura", place: "Casa · Buzón", head: "Centro Médico de Ejemplo", big: "$412.00", sub: "Monto a pagar", ok: "" },
+      { time: "6:44 p. m.", short: "6:44 p. m.", title: "Busque su EOB", place: "Seguro · Sitio web de miembros", head: "Explicación de Beneficios", big: "$96.40", sub: "Lo que usted debe", ok: "Descargada" },
+      { time: "6:50 p. m.", short: "6:50 p. m.", title: "Tome una foto", place: "Mesa de la cocina · Teléfono", head: "Revisión de foto", big: "", sub: "", ok: "Foto clara" },
+      { time: "6:53 p. m.", short: "6:53 p. m.", title: "Dos cosas para revisar", place: "Clyvexa", head: "", big: "", sub: "", ok: "" },
+      { time: "9:05 a. m.", short: "9:05 a. m.", title: "Haga la llamada", place: "Oficina de facturación · A la mañana siguiente", head: "", big: "", sub: "", ok: "" },
+      { time: "3 semanas después", short: "+3 semanas", title: "Una factura corregida", place: "Casa · Buzón", head: "Estado de cuenta actualizado", big: "$96.40", sub: "Monto a pagar", ok: "Coincide con su EOB" },
     ],
-    upload: { files: ["factura-pagina-1.jpg", "factura-pagina-2.jpg", "eob-marzo.pdf"], ok: "Clara" },
-    confirm: { edit: "Editar", button: "Está bien, revisar" },
-    act: { letter: "Carta de disputa", greeting: "Al departamento de facturación:", pdf: "Descargar PDF", copy: "Copiar texto" },
+    reply: "Veo el cargo duplicado. Lo voy a corregir.",
   },
   checks: {
     title: "Qué revisa",

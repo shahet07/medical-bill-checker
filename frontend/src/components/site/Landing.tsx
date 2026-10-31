@@ -3,7 +3,7 @@
 import { SITE_TEXT } from "@/lib/siteText";
 import Bento from "./Bento";
 import HeroScan from "./HeroScan";
-import HowSteps from "./HowSteps";
+import Journey from "./Journey";
 import Icon from "./Icon";
 import { CountUp, useReveal } from "./motion";
 import { SiteFooter, SiteHeader, useSiteLang } from "./SiteChrome";
@@ -72,13 +72,12 @@ export default function Landing() {
           </div>
         </section>
 
-        {/* How it works: a timeline with a picture of each step */}
-        <section id="how" className="section warm">
+        {/* How it works: one bill's journey through an isometric town */}
+        <section id="how" className="section journey-section">
           <div className="site-wrap">
-            <p className="kicker reveal">{s.how.label}</p>
-            <h2 className="display reveal">{s.how.title}</h2>
+            <h2 className="sr-only">{s.journey.title}</h2>
             <div className="reveal">
-              <HowSteps s={s} />
+              <Journey s={s} />
             </div>
           </div>
         </section>
