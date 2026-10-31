@@ -38,7 +38,9 @@ export function SiteHeader(props: { text: SiteText; lang?: Lang; onToggleLang?: 
       <div className="site-wrap site-nav-row">
         <a href="/" className="brand site-brand" aria-label="Clyvexa home">
           <img src="/icon.svg" alt="" width={36} height={36} className="brand-mark" />
-          <span>Clyvexa</span>
+          <span className="brand-name">
+            Clyvexa<small>{text.hero.eyebrow}</small>
+          </span>
         </a>
         <nav aria-label="Main" className="site-links">
           <a href={anchor("how")}>{text.nav.how}</a>

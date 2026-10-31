@@ -13,7 +13,6 @@ export default function Landing() {
         <section className="site-hero">
           <div className="site-wrap hero-grid">
             <div>
-              <p className="eyebrow">{s.hero.eyebrow}</p>
               <h1>{s.hero.title}</h1>
               <p className="lead">{s.hero.lead}</p>
               <div className="hero-actions">
