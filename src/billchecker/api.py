@@ -385,6 +385,9 @@ def create_app(settings: Settings) -> FastAPI:
     if frontend:
         # Hashed, immutable build assets.
         app.mount("/_next", StaticFiles(directory=frontend / "_next"), name="next")
+        if (frontend / "models").is_dir():
+            # In-browser models (TensorFlow.js weights), fetched only when someone picks a photo.
+            app.mount("/models", StaticFiles(directory=frontend / "models"), name="models")
     app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
     def current_user(request: Request) -> UserRow:

@@ -5,6 +5,7 @@ import { useApp } from "@/lib/app";
 import { money, parseAmount, shortDate } from "@/lib/format";
 import type { CaseData, CaseSummary } from "@/lib/types";
 import { RadarSearch } from "./Radar";
+import { checkPhoto } from "@/lib/photoCheck";
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 const MAX_FILES = 10;
@@ -32,12 +33,40 @@ export function UploadView(props: {
   const formRef = useRef<HTMLFormElement>(null);
   // Uploads that passed but had photo quality warnings, waiting for the user's choice.
   const [pending, setPending] = useState<{ billId: string; eobIds: string[]; warnings: Warning[] } | null>(null);
+  // On-device check (TensorFlow.js) of the photos currently chosen, before upload.
+  const [device, setDevice] = useState<{ checking: boolean; checked: number; flagged: { name: string; issues: string[] }[] }>({
+    checking: false,
+    checked: 0,
+    flagged: [],
+  });
+
+  const checkOnDevice = async () => {
+    const inputs = Array.from(formRef.current?.querySelectorAll<HTMLInputElement>("#bill-file, .eob-file") ?? []);
+    const files = inputs.flatMap((i) => Array.from(i.files ?? []));
+    const photos = files.filter((f) => /^image\/(jpeg|png|webp)$/.test(f.type));
+    if (!photos.length) return setDevice({ checking: false, checked: 0, flagged: [] });
+    setDevice({ checking: true, checked: 0, flagged: [] });
+    const flagged: { name: string; issues: string[] }[] = [];
+    let checked = 0;
+    for (const f of photos) {
+      try {
+        const r = await checkPhoto(f);
+        if (!r) continue;
+        checked++;
+        if (r.issues.length) flagged.push({ name: f.name, issues: r.issues });
+      } catch {
+        /* model unavailable: the server-side check still runs at upload */
+      }
+    }
+    setDevice({ checking: false, checked, flagged });
+  };
 
   // A fresh form each time the upload screen is shown again.
   useEffect(() => {
     formRef.current?.reset();
     setEobSlots(1);
     setPending(null);
+    setDevice({ checking: false, checked: 0, flagged: [] });
   }, [props.historyKey]);
 
   const createCase = async (billId: string, eobIds: string[]) => {
@@ -74,7 +103,8 @@ export function UploadView(props: {
         eobIds.push(up.upload_id);
         warnings.push(...up.quality.filter((q) => q.issues.length).map((q) => ({ ...q, doc: "eob" as const })));
       }
-      if (warnings.length) {
+      // If the on-device check already warned about these photos, don't ask twice.
+      if (warnings.length && device.flagged.length === 0) {
         setPending({ billId: billUp.upload_id, eobIds, warnings });
         return;
       }
@@ -89,7 +119,9 @@ export function UploadView(props: {
   return (
     <section id="upload-view" className="card" hidden={props.hidden}>
       <h2>{ts("upload_title")}</h2>
-      <form id="upload-form" noValidate ref={formRef} onSubmit={submit}>
+      <form id="upload-form" noValidate ref={formRef} onSubmit={submit} onChange={(e) => {
+        if ((e.target as HTMLElement).matches?.('input[type="file"]')) checkOnDevice();
+      }}>
         <div className="field">
           <label htmlFor="bill-file">
             <span>{ts("bill_label")}</span> <span className="req">{ts("required")}</span>
@@ -119,6 +151,21 @@ export function UploadView(props: {
             {ts("add_eob")}
           </button>
           <p className="hint">{ts("eob_hint")}</p>
+        </div>
+        <div id="device-check" aria-live="polite">
+          {device.checking ? <p className="hint">{t("device_checking")}</p> : null}
+          {!device.checking && device.flagged.length ? (
+            <div className="note quality">
+              <strong>{t("device_warn_title")}</strong>
+              <ul>
+                {device.flagged.map((f) => (
+                  <li key={f.name}>{t("device_file", { name: f.name, issues: f.issues.map((i) => t("quality_" + i)).join(", ") })}</li>
+                ))}
+              </ul>
+              <p className="hint">{t("device_note")} {t("quality_tips")}</p>
+            </div>
+          ) : null}
+          {!device.checking && device.checked > 0 && !device.flagged.length ? <p className="hint device-ok">{t("device_ok")}</p> : null}
         </div>
         <button id="upload-button" type="submit" className="primary" disabled={busy}>
           {busy ? t("uploading") : ts("check_button")}

@@ -63,6 +63,8 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci --no-audit --no-fund
       - run: npm run typecheck
+      - name: TensorFlow.js model matches Keras
+        run: node scripts/tfjs-parity.mjs
       - run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: "1"

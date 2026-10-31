@@ -70,6 +70,18 @@ Right after a photo or scanned page is uploaded, before any LLM call, a small co
 - **Retrain:** `pip install -e ".[ml]"`, then `.venv/bin/python scripts/train_photo_quality.py`.
 - **Limitation:** it's trained on synthetic photos. Once real tester photos exist, measure it on those and retrain with them if needed.
 
+## On-device photo check (TensorFlow → TensorFlow.js)
+
+The same check also runs **in the patient's browser, before anything is uploaded**. As soon as someone picks a photo, a TensorFlow.js model checks it on their own device. A blurry, dark or cut-off photo is flagged before it leaves the phone, which is faster, more private, and spares a slow upload. The server-side ONNX check above stays as a backup for HEIC photos and scanned PDFs, which browsers can't read.
+
+- **Training** (`scripts/train_photo_quality_tf.py`, TensorFlow/Keras): the same synthetic photos, plus two browser realities:
+  - each sample uses a random resampling method, because browsers resize images differently from Python;
+  - half the samples skip the server's re-encode, because the browser sees the original photo.
+- **No converter tool:** the script exports the raw weights with a manifest. `frontend/src/lib/photoModel.ts` rebuilds the same layers in TensorFlow.js and loads them in order.
+- **Proven equal:** `frontend/scripts/tfjs-parity.mjs` runs the browser's own `photoModel.ts` in Node on saved inputs and checks that its outputs match Keras within 0.001. CI runs it on every push.
+- **Lazy loading:** TensorFlow.js and the weights are downloaded only when someone picks a photo.
+- **Retrain:** `pip install -e ".[ml-tf]"`, then `.venv/bin/python scripts/train_photo_quality_tf.py`.
+
 ## Ask a question (RAG)
 
 On the results page, users can ask questions like "How do I appeal?" or "Why doesn't my bill match my EOB?". The answers are grounded in the user's own bill data and in a small knowledge base of plain-language guides, and each answer cites the guides it used.

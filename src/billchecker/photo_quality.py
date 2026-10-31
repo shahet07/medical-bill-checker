@@ -34,21 +34,21 @@ DETAIL_EDGE = 1024  # scale at which the close-up tile is taken
 TILE_STRIDE = 96
 
 
-def _letterbox(img: Image.Image, size: int) -> Image.Image:
+def _letterbox(img: Image.Image, size: int, resample=Image.BILINEAR) -> Image.Image:
     img = img.copy()
-    img.thumbnail((size, size), Image.BILINEAR)
+    img.thumbnail((size, size), resample)
     canvas = Image.new("L", (size, size), 0)
     canvas.paste(img, ((size - img.width) // 2, (size - img.height) // 2))
     return canvas
 
 
-def _detail_tile(img: Image.Image) -> Image.Image:
+def _detail_tile(img: Image.Image, resample=Image.BILINEAR) -> Image.Image:
     """The SIZE x SIZE tile with the most contrast (usually text), at a fixed scale,
     so blur shows up whatever the photo's size or where the text is."""
     scaled = img.copy()
-    scaled.thumbnail((DETAIL_EDGE, DETAIL_EDGE), Image.BILINEAR)
+    scaled.thumbnail((DETAIL_EDGE, DETAIL_EDGE), resample)
     if scaled.width < SIZE or scaled.height < SIZE:
-        return _letterbox(scaled, SIZE)
+        return _letterbox(scaled, SIZE, resample)
     a = np.asarray(scaled, dtype=np.float32)
     best, best_xy = -1.0, (0, 0)
     for y in range(0, a.shape[0] - SIZE + 1, TILE_STRIDE):
@@ -60,10 +60,11 @@ def _detail_tile(img: Image.Image) -> Image.Image:
     return scaled.crop((x, y, x + SIZE, y + SIZE))
 
 
-def features(image: Image.Image) -> np.ndarray:
-    """uint8 array (2, SIZE, SIZE): channel 0 the whole page, channel 1 the detail tile."""
+def features(image: Image.Image, resample=Image.BILINEAR) -> np.ndarray:
+    """uint8 array (2, SIZE, SIZE): channel 0 the whole page, channel 1 the detail tile.
+    `resample` varies only in training, so models tolerate other resizers (e.g. a browser canvas)."""
     gray = ImageOps.exif_transpose(image).convert("L")
-    return np.stack([np.asarray(_letterbox(gray, SIZE)), np.asarray(_detail_tile(gray))]).astype(np.uint8)
+    return np.stack([np.asarray(_letterbox(gray, SIZE, resample)), np.asarray(_detail_tile(gray, resample))]).astype(np.uint8)
 
 
 class PhotoQuality:

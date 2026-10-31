@@ -29,6 +29,8 @@ dependencies = [
 mcp = ["mcp>=2"]
 # Training the photo quality model (scripts/train_photo_quality.py). Not needed to run the app.
 ml = ["torch>=2.4", "onnx>=1.16", "onnxscript>=0.1"]
+# Training the in-browser model (scripts/train_photo_quality_tf.py), served with TensorFlow.js.
+ml-tf = ["tensorflow>=2.16"]
 dev = [
     "mcp>=2",
     "pytest>=8",

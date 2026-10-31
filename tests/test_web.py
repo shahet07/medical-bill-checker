@@ -206,3 +206,27 @@ def test_inline_script_hashes_cover_every_page(tmp_path):
     root = _fake_export(tmp_path / "out")
     (root / "404.html").write_text("<script>other()</script><script src=x.js></script>")
     assert len(inline_script_hashes(root)) == 2
+
+
+def test_in_browser_models_are_served(pg_dsn, llm, clock, tmp_path):  # noqa: F811
+    from test_api import make_client
+
+    root = _fake_export(tmp_path / "out")
+    (root / "models" / "photo-quality").mkdir(parents=True)
+    (root / "models" / "photo-quality" / "manifest.json").write_text('{"version": 1}')
+    with make_client(pg_dsn, llm, clock, frontend_dir=root) as c:
+        r = c.get("/models/photo-quality/manifest.json")
+        assert r.status_code == 200 and r.json() == {"version": 1}
+        assert "content-security-policy" in r.headers
+
+
+FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
+
+
+@pytest.mark.skipif(
+    shutil.which("node") is None or not (FRONTEND / "node_modules" / "@tensorflow" / "tfjs").is_dir(),
+    reason="needs node and frontend/node_modules (CI runs this in the frontend job)",
+)
+def test_tfjs_model_matches_keras():
+    r = subprocess.run(["node", "scripts/tfjs-parity.mjs"], cwd=FRONTEND, capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
