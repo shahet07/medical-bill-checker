@@ -115,6 +115,33 @@ MIGRATIONS = [
     );
     CREATE INDEX events_name_time ON events(name, created_at);
     """,
+    # 2: dispute packets, document fingerprints, and the billing error radar.
+    """
+    ALTER TABLE users ADD COLUMN radar_consent BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE uploads ADD COLUMN doc_sha256 JSONB NOT NULL DEFAULT '[]'::jsonb;
+    CREATE TABLE packets (
+        packet_id TEXT PRIMARY KEY,
+        case_id TEXT NOT NULL REFERENCES cases(case_id) ON DELETE CASCADE,
+        payload JSONB NOT NULL,          -- what the letter already states; no files
+        signature TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL
+    );
+    CREATE INDEX packets_case ON packets(case_id);
+    CREATE TABLE radar_reports (
+        report_key TEXT PRIMARY KEY,     -- keyed hash of (case, flag)
+        provider_key TEXT NOT NULL,      -- normalized provider name
+        provider_name TEXT NOT NULL,
+        rule TEXT NOT NULL,
+        code TEXT,
+        user_key TEXT NOT NULL,          -- keyed hash; counts distinct people
+        case_key TEXT NOT NULL,          -- keyed hash; lets a case's reports be deleted
+        confirmed BOOLEAN NOT NULL DEFAULT FALSE,
+        month TEXT NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL
+    );
+    CREATE INDEX radar_provider ON radar_reports(provider_key);
+    CREATE INDEX radar_user ON radar_reports(user_key);
+    """,
 ]
 
 
@@ -172,6 +199,7 @@ class UserRow:
     email: str
     password_hash: str
     research_consent: bool
+    radar_consent: bool
     failed_logins: int
     locked_until: Optional[datetime]
     created_at: datetime
@@ -264,7 +292,7 @@ class Store:
         if row is None:
             return None
         return UserRow(
-            row["user_id"], row["email"], row["password_hash"], row["research_consent"],
+            row["user_id"], row["email"], row["password_hash"], row["research_consent"], row["radar_consent"],
             row["failed_logins"], row["locked_until"], row["created_at"],
         )
 
@@ -310,12 +338,18 @@ class Store:
     def set_consent(self, user_id: str, consent: bool) -> None:
         self._q("UPDATE users SET research_consent = %s WHERE user_id = %s", (consent, user_id))
 
+    def set_radar_consent(self, user_id: str, consent: bool) -> None:
+        self._q("UPDATE users SET radar_consent = %s WHERE user_id = %s", (consent, user_id))
+        if not consent:
+            self._q("DELETE FROM radar_reports WHERE user_key = %s", (self.pseudonym("user", user_id),))
+
     def delete_user(self, user_id: str) -> None:
         """Deletes the account, its sessions, uploads, and cases (and their research rows).
         Usage events stay as counts but lose their link to the user."""
         for case in self._q("SELECT case_id FROM cases WHERE user_id = %s", (user_id,)):
             self._q("DELETE FROM research_cases WHERE research_id = %s", (self.pseudonym("case", case["case_id"]),))
         self._q("UPDATE events SET user_key = NULL WHERE user_key = %s", (self.pseudonym("user", user_id),))
+        self._q("DELETE FROM radar_reports WHERE user_key = %s", (self.pseudonym("user", user_id),))
         self._q("DELETE FROM users WHERE user_id = %s", (user_id,))
 
     # --- sessions ---------------------------------------------------------------------------
@@ -344,12 +378,17 @@ class Store:
 
     # --- uploads ----------------------------------------------------------------------------
 
-    def add_upload(self, user_id: str, kind: str, mime_type: str, page_count: int, data: bytes) -> UploadRow:
+    def add_upload(
+        self, user_id: str, kind: str, mime_type: str, page_count: int, data: bytes, doc_sha256: Optional[List[str]] = None
+    ) -> UploadRow:
+        """doc_sha256: fingerprint of each uploaded file, kept after the file itself is purged."""
         upload_id = new_id()
         now = self._now()
         self._q(
-            "INSERT INTO uploads VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
-            (upload_id, user_id, kind, mime_type, page_count, self._seal(upload_id, data), now, now + self.file_ttl, now + self.file_ttl),
+            "INSERT INTO uploads (upload_id, user_id, kind, mime_type, page_count, data, created_at, files_expire_at, "
+            "expires_at, doc_sha256) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            (upload_id, user_id, kind, mime_type, page_count, self._seal(upload_id, data), now, now + self.file_ttl,
+             now + self.file_ttl, Jsonb(list(doc_sha256 or []))),
         )
         return UploadRow(upload_id, kind, mime_type, page_count, _iso(now + self.file_ttl))
 
@@ -363,6 +402,10 @@ class Store:
         if row is None:
             return None
         return UploadRow(row["upload_id"], row["kind"], row["mime_type"], row["page_count"], _iso(row["files_expire_at"]))
+
+    def get_upload_hashes(self, upload_id: str) -> List[str]:
+        row = self._one("SELECT doc_sha256 FROM uploads WHERE upload_id = %s", (upload_id,))
+        return list(row["doc_sha256"]) if row else []
 
     def get_upload_data(self, upload_id: str) -> Optional[bytes]:
         row = self._one("SELECT data FROM uploads WHERE upload_id = %s AND files_expire_at > %s", (upload_id, self._now()))
@@ -433,8 +476,79 @@ class Store:
             return False
         self._q("DELETE FROM uploads WHERE upload_id = ANY(%s)", ([case.bill_upload_id] + case.eob_upload_ids,))
         self._q("DELETE FROM research_cases WHERE research_id = %s", (self.pseudonym("case", case_id),))
-        self._q("DELETE FROM cases WHERE case_id = %s", (case_id,))
+        self.delete_radar_case(case_id)
+        self._q("DELETE FROM cases WHERE case_id = %s", (case_id,))  # packets go with it
         return True
+
+    # --- dispute packets --------------------------------------------------------------------
+
+    def put_packet(self, packet_id: str, case_id: str, payload: Dict[str, Any], signature: str) -> None:
+        self._q(
+            "INSERT INTO packets VALUES (%s, %s, %s, %s, %s)", (packet_id, case_id, Jsonb(payload), signature, self._now())
+        )
+
+    def get_packet(self, packet_id: str) -> Optional[Dict[str, Any]]:
+        """A packet is verifiable while its case exists (90 days unless deleted)."""
+        return self._one(
+            "SELECT p.payload, p.signature, p.created_at FROM packets p JOIN cases c USING (case_id) "
+            "WHERE p.packet_id = %s AND c.expires_at > %s",
+            (packet_id, self._now()),
+        )
+
+    # --- billing error radar ----------------------------------------------------------------
+
+    def put_radar_reports(self, case_id: str, user_id: str, provider_key: str, provider_name: str, items: List[Dict[str, Any]]) -> None:
+        """Replace this case's reports. items: {flag_id, rule, code}."""
+        case_key, user_key = self.pseudonym("case", case_id), self.pseudonym("user", user_id)
+        now = self._now()
+        with self.pool.connection() as conn, conn.transaction():
+            confirmed = {
+                r[0]
+                for r in conn.execute(
+                    "SELECT report_key FROM radar_reports WHERE case_key = %s AND confirmed", (case_key,)
+                )
+            }
+            conn.execute("DELETE FROM radar_reports WHERE case_key = %s", (case_key,))
+            for item in items:
+                key = self.pseudonym("radar", case_id, item["flag_id"])
+                conn.execute(
+                    "INSERT INTO radar_reports VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    (key, provider_key, provider_name, item["rule"], item.get("code"), user_key, case_key,
+                     key in confirmed, now.strftime("%Y-%m"), now),
+                )
+
+    def confirm_radar_report(self, case_id: str, flag_id: str, confirmed: bool) -> None:
+        self._q(
+            "UPDATE radar_reports SET confirmed = %s, updated_at = %s WHERE report_key = %s",
+            (confirmed, self._now(), self.pseudonym("radar", case_id, flag_id)),
+        )
+
+    def delete_radar_case(self, case_id: str) -> None:
+        self._q("DELETE FROM radar_reports WHERE case_key = %s", (self.pseudonym("case", case_id),))
+
+    def radar_patterns(self, provider_key: str, k: int) -> List[Dict[str, Any]]:
+        """Patterns at one provider reported by at least k different people."""
+        return self._q(
+            "SELECT rule, code, count(DISTINCT user_key) AS users, "
+            "count(DISTINCT user_key) FILTER (WHERE confirmed) AS confirmed_users, max(month) AS last_month "
+            "FROM radar_reports WHERE provider_key = %s GROUP BY rule, code HAVING count(DISTINCT user_key) >= %s "
+            "ORDER BY users DESC, rule, code",
+            (provider_key, k),
+        )
+
+    def radar_providers(self, query: str, k: int, limit: int = 20) -> List[Dict[str, Any]]:
+        """Providers with at least one pattern reported by k or more people, matching the search text."""
+        return self._q(
+            "SELECT provider_key, mode() WITHIN GROUP (ORDER BY provider_name) AS provider_name, count(*) AS patterns "
+            "FROM (SELECT provider_key, provider_name, rule, coalesce(code, '') AS code FROM radar_reports "
+            "      GROUP BY provider_key, provider_name, rule, coalesce(code, '')) AS named "
+            # coalesce: rules without a code (e.g. balance mismatch) must still match.
+            "WHERE provider_key LIKE %s AND (provider_key, rule, code) IN ("
+            "  SELECT provider_key, rule, coalesce(code, '') FROM radar_reports GROUP BY provider_key, rule, coalesce(code, '') "
+            "  HAVING count(DISTINCT user_key) >= %s) "
+            "GROUP BY provider_key ORDER BY patterns DESC, provider_key LIMIT %s",
+            ("%" + query + "%", k, limit),
+        )
 
     # --- collected data ---------------------------------------------------------------------
 

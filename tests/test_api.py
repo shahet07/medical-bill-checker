@@ -620,3 +620,48 @@ def test_ask_with_and_without_a_bill(client, llm):
 
 def test_ask_requires_login(client):
     assert TestClient(client.app).post("/api/ask", json={"question": "What is an EOB?"}).status_code == 401
+
+
+# --- Call rehearsal ------------------------------------------------------------------------------
+
+
+def test_rehearsal_flow_and_nothing_stored(client, llm):
+    from billchecker.rehearsal import REPLY_SCHEMA, SCORE_SCHEMA
+
+    case_id = start_case(client, llm, "denial")
+    original = llm.generate
+
+    def generate(system, content, schema):
+        if schema is REPLY_SCHEMA:
+            return LLMResponse(text=json.dumps({"reply": "Let me look at the balance of $80.00.", "call_ended": False}), stop_reason="end_turn")
+        if schema is SCORE_SCHEMA:
+            score = {"scores": {"clarity": 4, "evidence": 4, "asks": 3, "persistence": 3}, "strengths": ["Clear opening."],
+                     "improvements": ["Ask for a reference number."], "try_saying": ["Can I get a reference number?"], "citations": ["S1"]}
+            return LLMResponse(text=json.dumps(score), stop_reason="end_turn")
+        return original(system, content, schema)
+
+    llm.generate = generate
+    url = "/api/cases/{}/rehearse".format(case_id)
+    start = client.post(url, json={"counterpart": "billing_office"}).json()
+    assert "Riverside Medical Group" in start["reply"] and start["suggested_opener"].startswith("Hi, I'm calling")
+    said = "My bill says $80.00 but my EOB says $25.00. Pretend secret phrase 7f3k."
+    turns = [{"role": "rep", "text": start["reply"]}, {"role": "patient", "text": said}]
+    r = client.post(url, json={"counterpart": "billing_office", "turns": turns}).json()
+    assert r["reply"] == "Let me look at the balance of $80.00." and r["fallback"] is False
+    turns.append({"role": "rep", "text": r["reply"]})
+    turns.append({"role": "patient", "text": "Thanks, bye."})
+    score = client.post(url + "/score", json={"counterpart": "billing_office", "turns": turns}).json()
+    assert score["scores"]["clarity"] == 4 and score["sources"]
+    assert "7f3k" not in db_dump(client)  # practice calls are never stored
+    counts = client.app.state.store.event_counts()
+    assert counts.get("rehearsal_started") == 1 and counts.get("rehearsal_scored") == 1
+
+
+def test_rehearsal_validation(client, llm):
+    case_id = start_case(client, llm, "denial")
+    url = "/api/cases/{}/rehearse".format(case_id)
+    rep_last = [{"role": "patient", "text": "hi"}, {"role": "rep", "text": "hello"}]
+    assert client.post(url, json={"turns": rep_last}).status_code == 422
+    assert client.post(url, json={"turns": [{"role": "boss", "text": "hi"}]}).status_code == 422
+    assert client.post(url + "/score", json={"turns": []}).status_code == 422
+    assert other_user(client).post(url, json={}).status_code == 404

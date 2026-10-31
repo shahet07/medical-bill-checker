@@ -229,7 +229,9 @@ def test_event_counts_since(store, alice, clock):
 def test_migrations_are_idempotent(pg_dsn, store, clock):
     again = Store(pg_dsn, KEY, now=clock)
     again.close()
-    assert raw(store, "SELECT version FROM schema_migrations") == [(1,)]
+    from billchecker.store import MIGRATIONS
+
+    assert raw(store, "SELECT version FROM schema_migrations ORDER BY version") == [(v,) for v in range(1, len(MIGRATIONS) + 1)]
 
 
 # --- Helpers ----------------------------------------------------------------------------

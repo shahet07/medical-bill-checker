@@ -227,3 +227,17 @@ td.date { white-space: nowrap; color: var(--muted); }
 .actions-card { justify-content: space-between; }
 
 .site-footer { color: var(--muted); font-size: 0.85rem; padding-bottom: 32px; }
+
+/* Practice call */
+.call-log { list-style: none; margin: 14px 0; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 420px; overflow-y: auto; }
+.turn { max-width: 85%; padding: 10px 12px; border-radius: 12px; display: flex; flex-direction: column; gap: 2px; }
+.turn-rep { align-self: flex-start; background: var(--bg); border: 1px solid var(--border); }
+.turn-patient { align-self: flex-end; background: var(--accent-soft); }
+.turn-who { font-size: 0.75rem; font-weight: 600; color: var(--muted); }
+#rehearse-form textarea { margin-bottom: 10px; }
+#rehearse-restart { margin-top: 14px; }
+.score h3 { font-size: 0.95rem; margin: 16px 0 6px; }
+.skills { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+.skill { display: contents; }
+.skills dd { margin: 0; display: flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; }
+.skills meter { width: 140px; }

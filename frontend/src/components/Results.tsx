@@ -6,6 +6,7 @@ import { apiBlob, saveBlob } from "@/lib/api";
 import { money, parseAmount, shortDate } from "@/lib/format";
 import { GLOSSARY } from "@/lib/i18n";
 import type { AskResult, CaseData, Flag, Letter, LineItem, Source } from "@/lib/types";
+import Rehearse from "./Rehearse";
 
 interface Props {
   hidden: boolean;
@@ -32,6 +33,7 @@ export default function Results(props: Props) {
           <Ask caseId={props.caseId} />
           <Lines c={c} caseId={props.caseId} onResubmitted={props.onResubmitted} />
           <LetterCard c={c} caseId={props.caseId} included={included} />
+          <Rehearse c={c} caseId={props.caseId} />
           <Survey caseId={props.caseId} />
           <div className="card actions-card">
             <NewAndDelete onNewBill={props.onNewBill} onDelete={props.onDelete} />

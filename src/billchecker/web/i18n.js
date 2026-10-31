@@ -336,6 +336,7 @@ const SERVER_ERRORS_ES = {
   email_taken: "Ya existe una cuenta con este email. Pruebe a iniciar sesión.",
   bad_origin: "Solicitud rechazada.",
   invalid_question: "Haga una pregunta más corta.",
+  invalid_rehearsal: "La práctica no pudo continuar. Empiece de nuevo.",
 };
 
 const GLOSSARY = {

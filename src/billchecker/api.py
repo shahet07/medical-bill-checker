@@ -49,6 +49,7 @@ from .llm import JsonLLM, make_llm
 from .models import Bill, Eob, Flag, Money
 from .pipeline import CaseRunner
 from .rag import MAX_QUESTION_CHARS, GeminiEmbedder, KnowledgeBase, answer_question
+from .rehearsal import MAX_TURNS, Turn, opening, rep_reply, score_call, suggested_opener
 from .reference import Reference, load_pairs, load_prices
 from .store import Store, UserRow, load_key, pack_files
 
@@ -91,6 +92,7 @@ DEFAULT_LIMITS = {
     "register": (5, 3600),
     "account": (10, 3600),
     "ask": (30, 3600),
+    "rehearse": (150, 3600),
 }
 
 
@@ -246,6 +248,12 @@ class Survey(_Body):
 class Question(_Body):
     question: str = Field(min_length=1, max_length=MAX_QUESTION_CHARS)
     case_id: Optional[str] = None  # answer with this bill's data in mind
+    language: Literal["en", "es"] = "en"
+
+
+class Rehearsal(_Body):
+    counterpart: Literal["billing_office", "insurer"] = "billing_office"
+    turns: List[Turn] = Field(default_factory=list, max_length=MAX_TURNS)
     language: Literal["en", "es"] = "en"
 
 
@@ -699,6 +707,55 @@ def create_app(settings: Settings) -> FastAPI:
             "fallback": ans.fallback,
             "sources": [src(s) for s in ans.sources],
             "related": [src(s) for s in ans.related],
+        }
+
+    def case_data(case_id: str, user: UserRow):
+        case, result = ready_result(case_id, user.user_id)
+        bill = Bill.model_validate(result["bill"])
+        eob = Eob.model_validate(result["eob"]) if result.get("eob") else None
+        return case, bill, eob, [Flag.model_validate(f) for f in result["flags"]]
+
+    @app.post("/api/cases/{case_id}/rehearse")
+    def rehearse(case_id: str, body: Rehearsal, user: UserRow = Depends(current_user)):
+        """One turn of a practice call. With no turns yet, returns the representative's greeting
+        and a suggested first line. The conversation is never stored."""
+        limiter.check(user.user_id, "rehearse")
+        _, bill, eob, flags = case_data(case_id, user)
+        if not body.turns:
+            store.record_event("rehearsal_started", user.user_id, counterpart=body.counterpart)
+            return {
+                "reply": opening(body.counterpart, bill, eob, body.language),
+                "call_ended": False,
+                "fallback": False,
+                "suggested_opener": suggested_opener(bill, flags, body.language),
+            }
+        try:
+            out = rep_reply(body.turns, body.counterpart, settings.llm, bill=bill, eob=eob, flags=flags, language=body.language)
+        except ValueError:
+            raise _error(422, "invalid_rehearsal", "The practice call could not continue. Please start again.")
+        if out.reason:
+            log.info("rehearsal fallback %s", out.reason)
+        return {"reply": out.text, "call_ended": out.call_ended, "fallback": out.fallback}
+
+    @app.post("/api/cases/{case_id}/rehearse/score")
+    def rehearse_score(case_id: str, body: Rehearsal, user: UserRow = Depends(current_user)):
+        limiter.check(user.user_id, "rehearse")
+        _, bill, eob, flags = case_data(case_id, user)
+        try:
+            out = score_call(body.turns, body.counterpart, settings.llm, knowledge, bill=bill, eob=eob, flags=flags, language=body.language)
+        except ValueError:
+            raise _error(422, "invalid_rehearsal", "Practice the call first, then ask for feedback.")
+        if out.reason:
+            log.info("rehearsal score fallback %s", out.reason)
+        store.record_event("rehearsal_scored", user.user_id, turns=len(body.turns), scored=not out.fallback)
+        return {
+            "scores": out.scores,
+            "strengths": out.strengths,
+            "improvements": out.improvements,
+            "try_saying": out.try_saying,
+            "sources": out.sources,
+            "fallback": out.fallback,
+            "tips": out.tips,
         }
 
     @app.delete("/api/cases/{case_id}", status_code=204)
