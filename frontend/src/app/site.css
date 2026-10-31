@@ -373,7 +373,7 @@
 /* the phone beside the scene */
 .phone { position: absolute; right: 0; top: 30%; width: min(260px, 26%); background: #0d1b4c; border-radius: 36px; padding: 10px; box-shadow: var(--shadow-lg); z-index: 2; }
 .phone-notch { width: 70px; height: 7px; border-radius: 4px; background: rgb(255 255 255 / 0.25); margin: 4px auto 10px; }
-.phone-body { position: relative; background: var(--card); color: var(--ink); border-radius: 26px; min-height: 330px; padding: 34px 18px 20px; display: flex; flex-direction: column; animation: screen-in 0.55s var(--ease-out) both; }
+.phone-body { position: relative; background: var(--card); color: var(--ink); border-radius: 26px; height: 360px; overflow: hidden; padding: 34px 18px 20px; display: flex; flex-direction: column; animation: screen-in 0.55s var(--ease-out) both; }
 @keyframes screen-in { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: none; } }
 .phone-tag { position: absolute; top: 10px; right: 12px; font-size: 0.66rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); background: var(--tint); padding: 2px 8px; border-radius: 999px; }
 .ps-doc, .ps-flags { display: flex; flex-direction: column; gap: 8px; }
@@ -424,9 +424,14 @@
 
 @media (max-width: 900px) {
   .journey-head { position: static; max-width: none; }
+  /* Reserve room for the longest step, so changing steps never moves the page. */
+  .journey-time { white-space: normal; font-size: clamp(2.6rem, 12vw, 3.6rem); min-height: 2.05em; display: flex; align-items: flex-end; }
+  .journey-head h3 { min-height: 2.6em; display: flex; align-items: flex-end; }
+  .journey-place { min-height: 3.1em; }
   .journey-stage { margin-top: 10px; }
   .phone { position: relative; right: auto; top: auto; width: 230px; margin: -10px auto 0; }
-  .phone-body { min-height: 280px; }
+  .phone-body { min-height: 0; height: 300px; overflow: hidden; }
+  .viewfinder { min-height: 170px; }
   .journey-line { overflow-x: auto; padding-bottom: 6px; }
   .journey-line li { min-width: 92px; }
 }

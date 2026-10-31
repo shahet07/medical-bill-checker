@@ -235,6 +235,7 @@ export default function Journey({ s }: { s: SiteText }) {
   const [step, setStep] = useState(0);
   const [auto, setAuto] = useState(true);
   const [visible, setVisible] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -246,15 +247,16 @@ export default function Journey({ s }: { s: SiteText }) {
   }, []);
 
   useEffect(() => {
-    if (!auto || !visible || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (!auto || !visible || hovered || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const t = window.setTimeout(() => setStep((n) => (n + 1) % s.journey.stops.length), STEP_MS);
     return () => window.clearTimeout(t);
-  }, [step, auto, visible, s.journey.stops.length]);
+  }, [step, auto, visible, hovered, s.journey.stops.length]);
 
   const stops = s.journey.stops;
   const st = stops[step];
   return (
-    <div className="journey" ref={root}>
+    // Autoplay pauses while the pointer is over the section, so nothing changes under it.
+    <div className="journey" ref={root} onPointerEnter={(e) => e.pointerType === "mouse" && setHovered(true)} onPointerLeave={() => setHovered(false)}>
       <div className="journey-head">
         <p className="kicker">
           {s.journey.label} · {s.journey.example}
