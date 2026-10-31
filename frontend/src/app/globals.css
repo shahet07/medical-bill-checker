@@ -282,3 +282,8 @@ td.date { white-space: nowrap; color: var(--muted); }
 .payment-form input, .refund-letter input { padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
 .refund-letter { border-top: 1px solid var(--border); margin-top: 18px; padding-top: 14px; display: flex; flex-direction: column; gap: 10px; }
 #refunds-back { margin-bottom: 24px; }
+
+/* Photo quality warning */
+.note.quality { margin-top: 16px; }
+.note.quality p { margin: 6px 0; }
+.note.quality ul { margin: 6px 0; padding-left: 18px; }

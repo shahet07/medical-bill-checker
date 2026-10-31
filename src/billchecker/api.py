@@ -51,6 +51,7 @@ from .pipeline import CaseRunner
 from .rag import MAX_QUESTION_CHARS, GeminiEmbedder, KnowledgeBase, answer_question
 from .radar import DEFAULT_K, normalize_provider, present
 from .refunds import Payment, Statement, episode_out, find_refunds, refund_letter
+from .photo_quality import check_pages
 from .packet import build_payload, new_packet_id, public_key_b64, sha256_hex, sign, signing_key
 from .packet import verify as verify_packet
 from .rehearsal import MAX_TURNS, Turn, opening, rep_reply, score_call, suggested_opener
@@ -558,8 +559,17 @@ def create_app(settings: Settings) -> FastAPI:
             raise _error(422, exc.code, exc.message)
         mime = MIME[sniff_type(files[0])] if len(files) == 1 else "multipart/mixed"
         row = store.add_upload(user.user_id, kind, mime, len(doc.pages), pack_files(files), [sha256_hex(f) for f in files])
-        store.record_event("upload", user.user_id, kind=kind, pages=row.page_count, files=len(files))
-        return {"upload_id": row.upload_id, "kind": kind, "page_count": row.page_count, "expires_at": row.expires_at}
+        # Photo quality: a fast local model, so a bad photo can be retaken before any LLM call. Warns only.
+        quality = check_pages(doc.pages)
+        flagged = [q for q in quality if q["issues"]]
+        store.record_event("upload", user.user_id, kind=kind, pages=row.page_count, files=len(files), quality_warnings=len(flagged))
+        return {
+            "upload_id": row.upload_id,
+            "kind": kind,
+            "page_count": row.page_count,
+            "expires_at": row.expires_at,
+            "quality": quality,
+        }
 
     @app.post("/api/cases", status_code=201)
     def create_case(body: CreateCase, user: UserRow = Depends(current_user)):

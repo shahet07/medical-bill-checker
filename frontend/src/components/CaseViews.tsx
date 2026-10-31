@@ -11,6 +11,12 @@ const MAX_FILES = 10;
 const MAX_EOBS = 5;
 const ACCEPT = "application/pdf,image/jpeg,image/png,image/heic,image/heif,.heic,.heif";
 
+interface Warning {
+  page: number;
+  issues: string[];
+  doc: "bill" | "eob";
+}
+
 // --- Upload and history ----------------------------------------------------------------------
 
 export function UploadView(props: {
@@ -24,12 +30,20 @@ export function UploadView(props: {
   const [eobSlots, setEobSlots] = useState(1);
   const [busy, setBusy] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  // Uploads that passed but had photo quality warnings, waiting for the user's choice.
+  const [pending, setPending] = useState<{ billId: string; eobIds: string[]; warnings: Warning[] } | null>(null);
 
   // A fresh form each time the upload screen is shown again.
   useEffect(() => {
     formRef.current?.reset();
     setEobSlots(1);
+    setPending(null);
   }, [props.historyKey]);
+
+  const createCase = async (billId: string, eobIds: string[]) => {
+    const created = await call<{ case_id: string }>("POST", "/api/cases", { bill_upload_id: billId, eob_upload_ids: eobIds, language: lang });
+    props.onCreated(created.case_id);
+  };
 
   const uploadFiles = async (kind: "bill" | "eob", files: FileList) => {
     const list = Array.from(files);
@@ -38,7 +52,7 @@ export function UploadView(props: {
     const form = new FormData();
     form.append("kind", kind);
     for (const f of list) form.append("file", f);
-    return call<{ upload_id: string }>("POST", "/api/uploads", form);
+    return call<{ upload_id: string; quality: { page: number; issues: string[] }[] }>("POST", "/api/uploads", form);
   };
 
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -53,14 +67,18 @@ export function UploadView(props: {
     setBusy(true);
     try {
       const billUp = await uploadFiles("bill", bill);
+      const warnings: Warning[] = billUp.quality.filter((q) => q.issues.length).map((q) => ({ ...q, doc: "bill" }));
       const eobIds: string[] = [];
-      for (const files of eobs) eobIds.push((await uploadFiles("eob", files)).upload_id);
-      const created = await call<{ case_id: string }>("POST", "/api/cases", {
-        bill_upload_id: billUp.upload_id,
-        eob_upload_ids: eobIds,
-        language: lang,
-      });
-      props.onCreated(created.case_id);
+      for (const files of eobs) {
+        const up = await uploadFiles("eob", files);
+        eobIds.push(up.upload_id);
+        warnings.push(...up.quality.filter((q) => q.issues.length).map((q) => ({ ...q, doc: "eob" as const })));
+      }
+      if (warnings.length) {
+        setPending({ billId: billUp.upload_id, eobIds, warnings });
+        return;
+      }
+      await createCase(billUp.upload_id, eobIds);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -106,6 +124,35 @@ export function UploadView(props: {
           {busy ? t("uploading") : ts("check_button")}
         </button>
       </form>
+      {pending ? (
+        <div id="quality-warning" className="note quality" role="alert">
+          <strong>{t("quality_title")}</strong>
+          <p>{t("quality_intro")}</p>
+          <ul>
+            {pending.warnings.map((w, i) => (
+              <li key={i}>
+                {t("quality_page", { doc: t(w.doc === "eob" ? "quality_doc_eob" : "quality_doc_bill"), n: w.page })}:{" "}
+                {w.issues.map((issue) => t("quality_" + issue)).join(", ")}
+              </li>
+            ))}
+          </ul>
+          <p className="hint">{t("quality_tips")}</p>
+          <div className="actions">
+            <button id="quality-retake" type="button" onClick={() => { setPending(null); formRef.current?.reset(); }}>
+              {t("quality_retake")}
+            </button>
+            <button id="quality-continue" type="button" className="primary" disabled={busy}
+              onClick={async () => {
+                const p = pending;
+                setPending(null);
+                setBusy(true);
+                try { await createCase(p.billId, p.eobIds); } catch (err) { setError((err as Error).message); } finally { setBusy(false); }
+              }}>
+              {t("quality_continue")}
+            </button>
+          </div>
+        </div>
+      ) : null}
       <p className="privacy">{ts("privacy")}</p>
       {props.loggedIn && !props.hidden ? <History refreshKey={props.historyKey} onOpenCase={props.onOpenCase} /> : null}
       {props.loggedIn && !props.hidden ? <RadarSearch /> : null}

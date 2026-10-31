@@ -20,11 +20,15 @@ dependencies = [
     "cryptography>=43",
     "psycopg[binary,pool]>=3.2",
     "argon2-cffi>=23",
+    # Runs the photo quality model (trained with PyTorch, exported to ONNX).
+    "onnxruntime>=1.18",
 ]
 
 [project.optional-dependencies]
 # MCP server for AI assistants (scripts entry point: billchecker-mcp).
 mcp = ["mcp>=2"]
+# Training the photo quality model (scripts/train_photo_quality.py). Not needed to run the app.
+ml = ["torch>=2.4", "onnx>=1.16", "onnxscript>=0.1"]
 dev = [
     "mcp>=2",
     "pytest>=8",
@@ -36,7 +40,7 @@ dev = [
 billchecker-mcp = "billchecker.mcp_server:main"
 
 [tool.setuptools.package-data]
-billchecker = ["web/*", "knowledge/*"]
+billchecker = ["web/*", "knowledge/*", "ml/*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "tests"]

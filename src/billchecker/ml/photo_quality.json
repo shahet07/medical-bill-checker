@@ -1,0 +1,50 @@
+{
+ "version": 1,
+ "labels": [
+  "blurry",
+  "too_dark",
+  "cut_off"
+ ],
+ "input": {
+  "name": "image",
+  "shape": [
+   null,
+   2,
+   192,
+   192
+  ],
+  "pixels": "uint8 values as float32 (0-255)"
+ },
+ "thresholds": {
+  "blurry": 0.54,
+  "too_dark": 0.2,
+  "cut_off": 0.2
+ },
+ "test_metrics": {
+  "blurry": {
+   "precision": 0.978,
+   "recall": 0.858,
+   "positives": 254
+  },
+  "too_dark": {
+   "precision": 1.0,
+   "recall": 1.0,
+   "positives": 199
+  },
+  "cut_off": {
+   "precision": 1.0,
+   "recall": 1.0,
+   "positives": 209
+  },
+  "false_warning_rate_on_good_photos": 0.007
+ },
+ "training": {
+  "train": 4000,
+  "val": 800,
+  "test": 800,
+  "epochs": 14,
+  "framework": "PyTorch 2.15.0",
+  "data": "synthetic photos of bills, EOBs, and letters (scripts/train_photo_quality.py)"
+ },
+ "trained_at": "2026-10-31"
+}

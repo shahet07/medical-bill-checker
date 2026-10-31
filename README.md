@@ -57,6 +57,19 @@ Features we haven't seen in other consumer billing tools:
 - **Refund finder.** Follows each visit across the patient's saved statements and EOBs, plus the payments they enter (encrypted, kept 90 days). It finds money the provider may owe back: a credit balance on the latest statement, paying more than the EOB says is owed, or a payment made twice. It then writes a refund-request letter. A new check also flags any statement with a credit balance. (`src/billchecker/refunds.py`)
 - **Billing error radar.** With a separate opt-in, patients share anonymous reports: provider name, type of problem and procedure code. They never share amounts, dates or personal details. A pattern appears only after **at least 10 different people** report it (k-anonymity, set with `BILLCHECKER_RADAR_K`; keep it at 10 or more in production), counts are shown as ranges, and reports a patient marks "No, it was fine" don't count. Results pages show patterns at the bill's provider, and patients can search providers. Reports are deleted if the patient withdraws consent or deletes the case or account. Because this stores provider names, **get legal review before launch.** (`src/billchecker/radar.py`)
 
+## Photo quality check (PyTorch → ONNX)
+
+Right after a photo or scanned page is uploaded, before any LLM call, a small convolutional network checks whether the page looks **blurry**, **too dark**, or **cut off**. If it does, the page tells the user to retake it, or lets them continue anyway. It warns but never blocks.
+
+- **Training** (`scripts/train_photo_quality.py`, PyTorch, about 5 minutes on a laptop GPU):
+  - It generates its own labeled data: thousands of synthetic phone photos of bills, EOBs and letters, with tilt, backgrounds, uneven light, noise, JPEG compression, and random blur, low light or cropping.
+  - Each image goes through the app's real ingest step, so training sees exactly what production sees.
+  - The network has two input views (the whole page, plus the most detailed close-up, where blur shows) and one output per problem.
+  - Thresholds are chosen on held-out data to keep false warnings rare. Test metrics are saved in `src/billchecker/ml/photo_quality.json`.
+- **Serving:** the model is exported to ONNX and run with ONNX Runtime, so the server doesn't need PyTorch. If the model is missing, the check is skipped.
+- **Retrain:** `pip install -e ".[ml]"`, then `.venv/bin/python scripts/train_photo_quality.py`.
+- **Limitation:** it's trained on synthetic photos. Once real tester photos exist, measure it on those and retrain with them if needed.
+
 ## Ask a question (RAG)
 
 On the results page, users can ask questions like "How do I appeal?" or "Why doesn't my bill match my EOB?". The answers are grounded in the user's own bill data and in a small knowledge base of plain-language guides, and each answer cites the guides it used.
