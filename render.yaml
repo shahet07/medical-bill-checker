@@ -6,6 +6,7 @@ services:
     name: clyvexa
     runtime: docker
     plan: free
+    region: ohio # next to the Neon database (AWS US East 2, Ohio)
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/auth/session
     autoDeploy: true
