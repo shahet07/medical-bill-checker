@@ -16,7 +16,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 OUT, FIX = Path(sys.argv[1]), Path(sys.argv[2])
-URL = "http://127.0.0.1:8765/"
+URL = "http://127.0.0.1:8765/app"
 OUT.mkdir(parents=True, exist_ok=True)
 errors = []
 

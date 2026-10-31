@@ -385,18 +385,28 @@ def create_app(settings: Settings) -> FastAPI:
     if frontend:
         # Hashed, immutable build assets.
         app.mount("/_next", StaticFiles(directory=frontend / "_next"), name="next")
-        # Icons and other files at the build's root (logo, favicons, touch icon). Images only.
+        # Pages of the built site by name (/app, /verify, /privacy, ...) and image files at its root
+        # (logo, favicons). Nothing else in the build folder is reachable.
+        pages = {f.stem: f for f in frontend.glob("*.html") if f.stem not in ("index", "404", "_not-found")}
         root_files = {f.name: f for f in frontend.iterdir() if f.is_file() and f.suffix in (".svg", ".png", ".ico", ".webmanifest")}
 
         @app.get("/{name}", include_in_schema=False)
-        def root_file(name: str):
-            if name not in root_files:
-                raise _error(404, "not_found", "Not found.")
-            return FileResponse(root_files[name], headers={"Cache-Control": "public, max-age=86400"})
+        def site_file(name: str):
+            if name in pages:
+                return FileResponse(pages[name], headers={"Cache-Control": "no-cache"})
+            if name in root_files:
+                return FileResponse(root_files[name], headers={"Cache-Control": "public, max-age=86400"})
+            raise _error(404, "not_found", "Not found.")
 
         if (frontend / "models").is_dir():
             # In-browser models (TensorFlow.js weights), fetched only when someone picks a photo.
             app.mount("/models", StaticFiles(directory=frontend / "models"), name="models")
+    else:
+        # Without a Next build the original single page is the app, at / and /app.
+        @app.get("/app", include_in_schema=False)
+        def legacy_app():
+            return FileResponse(WEB_DIR / "index.html", headers={"Cache-Control": "no-cache"})
+
     app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
     def current_user(request: Request) -> UserRow:
@@ -944,13 +954,6 @@ def create_app(settings: Settings) -> FastAPI:
             "algorithm": "Ed25519",
             "signature_valid": verify_packet(payload, row["signature"], packet_public),
         }
-
-    @app.get("/verify", include_in_schema=False)
-    def verify_page():
-        page = frontend / "verify.html" if frontend else None
-        if page is None or not page.is_file():
-            raise _error(404, "not_found", "Verification page not available.")
-        return FileResponse(page, headers={"Cache-Control": "no-cache"})
 
     @app.delete("/api/cases/{case_id}", status_code=204)
     def delete_case(case_id: str, user: UserRow = Depends(current_user)):

@@ -16,9 +16,11 @@ export default function Header(props: {
     <header className="site-header">
       <div className="wrap">
         <div className="header-row">
-          <h1 className="brand">
-            <img src="/icon.svg" alt="" width={40} height={40} className="brand-mark" />
-            <span>{ts("app_title")}</span>
+          <h1>
+            <a href="/" className="brand home-link">
+              <img src="/icon.svg" alt="" width={40} height={40} className="brand-mark" />
+              <span>{ts("app_title")}</span>
+            </a>
           </h1>
           <div className="header-actions">
             <span id="user-menu" hidden={!props.showUserMenu}>

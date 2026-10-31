@@ -7,7 +7,9 @@ WORKDIR /frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
-RUN NEXT_TELEMETRY_DISABLED=1 npm run build
+# Public address for social previews (optional): docker build --build-arg SITE_URL=https://example.com
+ARG SITE_URL=""
+RUN NEXT_TELEMETRY_DISABLED=1 SITE_URL="$SITE_URL" npm run build
 
 # 2. Python app, serving the API and the built frontend.
 FROM python:3.12-slim

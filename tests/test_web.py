@@ -198,6 +198,7 @@ def test_missing_build_falls_back_to_original_page(pg_dsn, llm, clock, tmp_path)
         r = c.get("/")
         assert '<script src="/static/app.js"' in r.text
         assert "sha256-" not in r.headers["content-security-policy"]
+        assert '<script src="/static/app.js"' in c.get("/app").text
 
 
 def test_inline_script_hashes_cover_every_page(tmp_path):
@@ -243,3 +244,19 @@ def test_root_icons_served_but_nothing_else(pg_dsn, llm, clock, tmp_path):  # no
         assert c.get("/notes.txt").status_code == 404
         assert c.get("/index.html").status_code == 404
         assert c.get("/api/auth/session").status_code == 200  # API routes are unaffected
+
+
+def test_site_pages_served_by_name(pg_dsn, llm, clock, tmp_path):  # noqa: F811
+    from test_api import make_client
+
+    root = _fake_export(tmp_path / "out")
+    for page in ("app", "verify", "privacy", "terms", "delete-account"):
+        (root / (page + ".html")).write_text("<html><body>{}</body></html>".format(page))
+    (root / "_not-found.html").write_text("nf")
+    with make_client(pg_dsn, llm, clock, frontend_dir=root) as c:
+        for page in ("app", "verify", "privacy", "terms", "delete-account"):
+            r = c.get("/" + page)
+            assert r.status_code == 200 and page in r.text, page
+            assert "content-security-policy" in r.headers
+        assert c.get("/_not-found").status_code == 404
+        assert c.get("/index").status_code == 404

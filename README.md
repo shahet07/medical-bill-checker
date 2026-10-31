@@ -46,7 +46,7 @@ export GEMINI_API_KEY=...
 .venv/bin/uvicorn --factory billchecker.api:app_from_env --port 8765
 ```
 
-Open http://127.0.0.1:8765 and create an account. Users can upload a bill (and EOBs), see each line explained and the flags with their evidence, create letters, revisit past bills from **My bills**, and manage or delete their account.
+Open http://127.0.0.1:8765 for the website (landing page, privacy policy, terms, account deletion page) and http://127.0.0.1:8765/app for the app, then create an account. Users can upload a bill (and EOBs), see each line explained and the flags with their evidence, create letters, revisit past bills from **My bills**, and manage or delete their account.
 
 The page is plain HTML/CSS/JS with no third-party scripts. A strict Content-Security-Policy blocks inline scripts, and bill data is only inserted as text. `scripts/ui_check.py` drives the whole flow in headless Chrome.
 

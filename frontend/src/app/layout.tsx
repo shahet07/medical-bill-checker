@@ -1,7 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
+// The public address, for absolute links in social previews. Set SITE_URL when building for a real domain.
+const siteUrl = process.env.SITE_URL;
+
 export const metadata: Metadata = {
+  ...(siteUrl ? { metadataBase: new URL(siteUrl) } : {}),
   title: "Clyvexa: Medical Bill Checker",
   description: "Understand your medical bill, compare it with your insurance statement, and get a letter to send.",
   icons: {
