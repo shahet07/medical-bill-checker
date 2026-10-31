@@ -385,6 +385,15 @@ def create_app(settings: Settings) -> FastAPI:
     if frontend:
         # Hashed, immutable build assets.
         app.mount("/_next", StaticFiles(directory=frontend / "_next"), name="next")
+        # Icons and other files at the build's root (logo, favicons, touch icon). Images only.
+        root_files = {f.name: f for f in frontend.iterdir() if f.is_file() and f.suffix in (".svg", ".png", ".ico", ".webmanifest")}
+
+        @app.get("/{name}", include_in_schema=False)
+        def root_file(name: str):
+            if name not in root_files:
+                raise _error(404, "not_found", "Not found.")
+            return FileResponse(root_files[name], headers={"Cache-Control": "public, max-age=86400"})
+
         if (frontend / "models").is_dir():
             # In-browser models (TensorFlow.js weights), fetched only when someone picks a photo.
             app.mount("/models", StaticFiles(directory=frontend / "models"), name="models")

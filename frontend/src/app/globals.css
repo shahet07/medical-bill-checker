@@ -290,3 +290,8 @@ td.date { white-space: nowrap; color: var(--muted); }
 
 #device-check { margin-bottom: 14px; }
 .device-ok { color: var(--ok); }
+
+/* Logo */
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-mark { width: 40px; height: 40px; border-radius: 9px; flex: none; }
+@media (max-width: 560px) { .brand-mark { width: 32px; height: 32px; border-radius: 7px; } }

@@ -230,3 +230,16 @@ FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
 def test_tfjs_model_matches_keras():
     r = subprocess.run(["node", "scripts/tfjs-parity.mjs"], cwd=FRONTEND, capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_root_icons_served_but_nothing_else(pg_dsn, llm, clock, tmp_path):  # noqa: F811
+    from test_api import make_client
+
+    root = _fake_export(tmp_path / "out")
+    (root / "icon.svg").write_text("<svg xmlns='http://www.w3.org/2000/svg'/>")
+    (root / "notes.txt").write_text("private")
+    with make_client(pg_dsn, llm, clock, frontend_dir=root) as c:
+        assert c.get("/icon.svg").status_code == 200
+        assert c.get("/notes.txt").status_code == 404
+        assert c.get("/index.html").status_code == 404
+        assert c.get("/api/auth/session").status_code == 200  # API routes are unaffected
