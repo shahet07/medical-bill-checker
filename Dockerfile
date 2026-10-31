@@ -29,5 +29,5 @@ ENV PYTHONUNBUFFERED=1 \
 EXPOSE 8000
 
 # --proxy-headers: HTTPS is terminated by the reverse proxy in front.
-CMD ["uvicorn", "--factory", "billchecker.api:app_from_env", "--host", "0.0.0.0", "--port", "8000", \
-     "--proxy-headers", "--forwarded-allow-ips", "*", "--workers", "1"]
+# PORT is set by hosts like Render; 8000 otherwise.
+CMD ["sh", "-c", "exec uvicorn --factory billchecker.api:app_from_env --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips '*' --workers 1"]

@@ -153,6 +153,10 @@
 #demo-run span { display: inline-block; transition: transform 0.25s var(--ease-out); }
 #demo-run:hover span { transform: translateX(4px); }
 
+.app-shell .card.connecting { display: flex; align-items: center; gap: 16px; }
+.app-shell .card.connecting p { margin: 0; color: var(--ink-soft); }
+.app-shell .card.connecting .spinner { display: block; }
+
 /* ---------- Footer ---------- */
 .app-shell .site-footer { padding: 28px 16px 40px; text-align: center; }
 

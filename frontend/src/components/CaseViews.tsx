@@ -6,7 +6,7 @@ import { money, parseAmount, shortDate } from "@/lib/format";
 import type { CaseData, CaseSummary } from "@/lib/types";
 import { RadarSearch } from "./Radar";
 import { checkPhoto } from "@/lib/photoCheck";
-import { STATIC_ONLY, at } from "@/lib/base";
+import { DEMO, at } from "@/lib/base";
 
 const DEMO_TEXT = {
   en: {
@@ -163,7 +163,7 @@ export function UploadView(props: {
 
   return (
     <section id="upload-view" className="card" hidden={props.hidden}>
-      {STATIC_ONLY ? (
+      {DEMO ? (
         <div className="demo-panel">
           <p className="kicker">{demo.kicker}</p>
           <h2>{demo.title}</h2>
@@ -192,7 +192,7 @@ export function UploadView(props: {
       ) : (
         <h2>{ts("upload_title")}</h2>
       )}
-      <form id="upload-form" hidden={STATIC_ONLY} noValidate ref={formRef} onSubmit={submit} onChange={(e) => {
+      <form id="upload-form" hidden={DEMO} noValidate ref={formRef} onSubmit={submit} onChange={(e) => {
         if ((e.target as HTMLElement).matches?.('input[type="file"]')) checkOnDevice();
       }}>
         <div className="field">
@@ -273,7 +273,7 @@ export function UploadView(props: {
           </div>
         </div>
       ) : null}
-      <p className="privacy" hidden={STATIC_ONLY}>{ts("privacy")}</p>
+      <p className="privacy" hidden={DEMO}>{ts("privacy")}</p>
       {props.loggedIn && !props.hidden ? <History refreshKey={props.historyKey} onOpenCase={props.onOpenCase} /> : null}
       {props.loggedIn && !props.hidden ? <RadarSearch /> : null}
     </section>

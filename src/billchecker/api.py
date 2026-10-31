@@ -25,7 +25,7 @@ import re
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Callable, Deque, Dict, List, Literal, Optional, Tuple
+from typing import Any, Callable, Deque, Dict, List, Literal, Optional, Tuple
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
@@ -114,6 +114,10 @@ class Settings:
     # Built Next.js frontend to serve at "/". None or missing: serve the original page in web/.
     frontend_dir: Optional[Path] = None
     secure_cookies: bool = True
+    # Other sites whose pages may call the API, e.g. ("https://shahet07.github.io",) for the
+    # GitHub Pages website. They log in with a token sent in a header, not the cookie,
+    # because browsers block cookies between different sites.
+    allowed_origins: Tuple[str, ...] = ()
     inline_jobs: bool = False
     cleanup_interval: Optional[float] = 3600.0  # seconds; None disables the background sweep
     limits: Dict[str, Tuple[int, int]] = field(default_factory=lambda: dict(DEFAULT_LIMITS))
@@ -360,14 +364,33 @@ def create_app(settings: Settings) -> FastAPI:
     csp = CSP_TEMPLATE.format(hashes="".join(" " + h for h in inline_script_hashes(frontend))) if frontend else CSP
     app.state.frontend = frontend
 
+    allowed_origins = {o.rstrip("/") for o in settings.allowed_origins}
+
+    def cors(response: Response, origin: str) -> None:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Expose-Headers"] = "Content-Disposition"
+        response.headers["Vary"] = "Origin"
+
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
-        # Refuse state-changing API calls made from another site's pages.
-        if request.method not in ("GET", "HEAD", "OPTIONS") and request.url.path.startswith("/api/"):
-            origin = request.headers.get("origin")
-            if origin and origin.split("://", 1)[-1] != request.headers.get("host", ""):
-                return JSONResponse({"detail": {"error": "bad_origin", "message": "Request refused."}}, status_code=403)
+        origin = request.headers.get("origin")
+        trusted = origin in allowed_origins if origin else False
+        if request.url.path.startswith("/api/"):
+            # Preflight from an allowed site (it sends JSON and an Authorization header).
+            if request.method == "OPTIONS" and trusted:
+                pre = Response(status_code=204)
+                cors(pre, origin)
+                pre.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE"
+                pre.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+                pre.headers["Access-Control-Max-Age"] = "600"
+                return pre
+            # Refuse state-changing API calls made from any other site's pages.
+            if request.method not in ("GET", "HEAD", "OPTIONS") and origin and not trusted:
+                if origin.split("://", 1)[-1] != request.headers.get("host", ""):
+                    return JSONResponse({"detail": {"error": "bad_origin", "message": "Request refused."}}, status_code=403)
         response = await call_next(request)
+        if trusted and request.url.path.startswith("/api/"):
+            cors(response, origin)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["X-Frame-Options"] = "DENY"
@@ -412,8 +435,15 @@ def create_app(settings: Settings) -> FastAPI:
 
     app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
+    def session_token(request: Request) -> Optional[str]:
+        """The login token: the cookie (same site), or "Authorization: Bearer ..." (allowed other site)."""
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.lower().startswith("bearer "):
+            return auth_header[7:].strip() or None
+        return request.cookies.get(SESSION_COOKIE)
+
     def current_user(request: Request) -> UserRow:
-        token = request.cookies.get(SESSION_COOKIE)
+        token = session_token(request)
         user = store.session_user(token) if token else None
         if user is None:
             raise _error(401, "login_required", "Please log in.")
@@ -422,7 +452,7 @@ def create_app(settings: Settings) -> FastAPI:
     def client_ip(request: Request) -> str:
         return request.client.host if request.client else "unknown"
 
-    def start_session(response: Response, user: UserRow) -> None:
+    def start_session(response: Response, user: UserRow) -> str:
         token = store.create_session(user.user_id)
         response.set_cookie(
             SESSION_COOKIE,
@@ -432,6 +462,13 @@ def create_app(settings: Settings) -> FastAPI:
             secure=settings.secure_cookies,
             samesite="strict",
         )
+        return token
+
+    def with_token(body: Dict[str, Any], request: Request, token: str) -> Dict[str, Any]:
+        """Pages on an allowed other site can't use the cookie, so they get the token to send back."""
+        if request.headers.get("origin") in allowed_origins:
+            body["session_token"] = token
+        return body
 
     def end_session(response: Response) -> None:
         response.delete_cookie(SESSION_COOKIE, secure=settings.secure_cookies, httponly=True, samesite="strict")
@@ -466,9 +503,9 @@ def create_app(settings: Settings) -> FastAPI:
         if body.radar_consent:
             store.set_radar_consent(user.user_id, True)
             user = store.get_user(user.user_id)
-        start_session(response, user)
+        token = start_session(response, user)
         store.record_event("signup", user.user_id, research_consent=user.research_consent)
-        return me(user)
+        return with_token(me(user), request, token)
 
     @app.post("/api/auth/login")
     def login(body: Login, request: Request, response: Response):
@@ -477,16 +514,16 @@ def create_app(settings: Settings) -> FastAPI:
             user = auth.login(store, body.email, body.password)
         except AuthError as exc:
             raise auth_error(exc)
-        old = request.cookies.get(SESSION_COOKIE)
+        old = session_token(request)
         if old:
             store.delete_session(old)
-        start_session(response, user)
+        token = start_session(response, user)
         store.record_event("login", user.user_id)
-        return me(user)
+        return with_token(me(user), request, token)
 
     @app.post("/api/auth/logout", status_code=204)
     def logout(request: Request):
-        token = request.cookies.get(SESSION_COOKIE)
+        token = session_token(request)
         if token:
             store.delete_session(token)
         response = Response(status_code=204)
@@ -496,7 +533,7 @@ def create_app(settings: Settings) -> FastAPI:
     @app.get("/api/auth/session")
     def session_status(request: Request):
         """Who is logged in, if anyone. Unlike /me, a logged-out browser gets 200, not an error."""
-        token = request.cookies.get(SESSION_COOKIE)
+        token = session_token(request)
         user = store.session_user(token) if token else None
         return {"user": me(user) if user else None}
 
@@ -509,7 +546,7 @@ def create_app(settings: Settings) -> FastAPI:
         limiter.check(user.user_id, "account")
         try:
             auth.change_password(
-                store, user, body.current_password, body.new_password, keep_session=request.cookies.get(SESSION_COOKIE)
+                store, user, body.current_password, body.new_password, keep_session=session_token(request)
             )
         except AuthError as exc:
             raise auth_error(exc)
@@ -990,5 +1027,7 @@ def app_from_env() -> FastAPI:
             radar_k=int(os.environ.get("BILLCHECKER_RADAR_K", DEFAULT_K)),
             knowledge=KnowledgeBase.from_env(embedder=GeminiEmbedder() if os.environ.get("GEMINI_API_KEY") else None),
             secure_cookies=os.environ.get("BILLCHECKER_INSECURE_COOKIES") != "1",
+            # e.g. "https://shahet07.github.io" so the GitHub Pages website can use this server.
+            allowed_origins=tuple(o.strip() for o in os.environ.get("BILLCHECKER_ALLOWED_ORIGINS", "").split(",") if o.strip()),
         )
     )

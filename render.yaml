@@ -1,0 +1,25 @@
+# Render Blueprint: the Clyvexa server (API + app), used by the GitHub Pages website.
+# Render -> New -> Blueprint -> pick this repository. It asks for the values marked
+# sync: false (see deploy/RENDER.md). The database is a free Neon PostgreSQL.
+services:
+  - type: web
+    name: clyvexa
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/auth/session
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL # from Neon: postgresql://...?sslmode=require
+        sync: false
+      - key: BILLCHECKER_KEY # 32 random bytes, base64; keep a copy, saved bills need it
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: BILLCHECKER_PROVIDER
+        value: gemini
+      - key: BILLCHECKER_MODEL
+        value: gemini-3.5-flash-lite
+      # The GitHub Pages website may call this server.
+      - key: BILLCHECKER_ALLOWED_ORIGINS
+        value: https://shahet07.github.io

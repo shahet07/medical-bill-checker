@@ -1,7 +1,7 @@
 "use client";
 
 import { useApp } from "@/lib/app";
-import { STATIC_ONLY, at } from "@/lib/base";
+import { DEMO, at } from "@/lib/base";
 import type { User } from "@/lib/types";
 
 const DEMO_BADGE = { en: "Demo · sample bill", es: "Demostración · factura de muestra" };
@@ -30,7 +30,7 @@ export default function Header(props: {
             </a>
           </h1>
           <div className="header-actions">
-            {STATIC_ONLY && <span className="demo-badge">{DEMO_BADGE[lang]}</span>}
+            {DEMO && <span className="demo-badge">{DEMO_BADGE[lang]}</span>}
             <span id="user-menu" hidden={!props.showUserMenu}>
               <span id="user-email" className="muted">
                 {props.user?.email}

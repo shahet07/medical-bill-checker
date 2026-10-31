@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppProvider, useApp } from "@/lib/app";
 import { ApiError, api } from "@/lib/api";
+import { API_URL } from "@/lib/base";
 import { Lang, STRINGS } from "@/lib/i18n";
 import type { CaseData, User } from "@/lib/types";
 import { AccountView, AuthView } from "./AuthViews";
@@ -229,6 +230,17 @@ export default function App() {
         <p id="error-banner" className="banner banner-error" role="alert" hidden={!error}>
           {error}
         </p>
+        {view === null && API_URL ? (
+          // A free hosted server sleeps when idle; the first request can take a while.
+          <section className="card connecting" aria-live="polite">
+            <span className="spinner" aria-hidden="true" />
+            <p>
+              {lang === "es"
+                ? "Conectando con el servidor de Clyvexa… Si estaba inactivo, puede tardar hasta un minuto en despertar."
+                : "Connecting to the Clyvexa server… If it was idle, it can take up to a minute to wake up."}
+            </p>
+          </section>
+        ) : null}
         <AuthView hidden={view !== "auth"} registerMode={registerMode} setRegisterMode={setRegisterMode} onLoggedIn={loggedIn} />
         <AccountView
           hidden={view !== "account"}

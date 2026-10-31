@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { serverUrl } from "@/lib/api";
 
 // Public page for whoever receives a dispute letter (usually a billing office).
 // Everything is checked in the browser: the signature with WebCrypto Ed25519,
@@ -80,7 +81,7 @@ export default function VerifyPacket() {
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("id");
     if (!id) return setError("This link is missing its reference. Check the address in the letter.");
-    fetch("/api/verify/" + encodeURIComponent(id))
+    fetch(serverUrl("/api/verify/" + encodeURIComponent(id)))
       .then(async (r) => {
         if (!r.ok) throw new Error(r.status === 404 ? "This verification link is not valid or has expired." : "Could not load this record. Please try again.");
         return (await r.json()) as Packet;
