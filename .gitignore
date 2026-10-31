@@ -10,3 +10,6 @@ deploy/.env
 .env.dev
 .DS_Store
 build/
+
+# Hero video: licensed for use on the site, not for redistribution (fetched at build time)
+frontend/public/media/

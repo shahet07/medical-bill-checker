@@ -401,6 +401,9 @@ def create_app(settings: Settings) -> FastAPI:
         if (frontend / "models").is_dir():
             # In-browser models (TensorFlow.js weights), fetched only when someone picks a photo.
             app.mount("/models", StaticFiles(directory=frontend / "models"), name="models")
+        if (frontend / "media").is_dir():
+            # The website's background video and its poster (fetched at build time).
+            app.mount("/media", StaticFiles(directory=frontend / "media"), name="media")
     else:
         # Without a Next build the original single page is the app, at / and /app.
         @app.get("/app", include_in_schema=False)

@@ -6,7 +6,9 @@
     "dev": "next dev --port 3000",
     "build": "next build",
     "typecheck": "tsc --noEmit",
-    "parity": "node scripts/tfjs-parity.mjs"
+    "parity": "node scripts/tfjs-parity.mjs",
+    "prebuild": "node scripts/fetch-media.mjs",
+    "fetch-media": "node scripts/fetch-media.mjs"
   },
   "dependencies": {
     "@tensorflow/tfjs": "^4.22.0",

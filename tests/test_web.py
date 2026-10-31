@@ -221,6 +221,19 @@ def test_in_browser_models_are_served(pg_dsn, llm, clock, tmp_path):  # noqa: F8
         assert "content-security-policy" in r.headers
 
 
+
+def test_site_media_is_served_with_ranges(pg_dsn, llm, clock, tmp_path):  # noqa: F811
+    from test_api import make_client
+
+    root = _fake_export(tmp_path / "out")
+    (root / "media").mkdir()
+    (root / "media" / "hero-720.mp4").write_bytes(b"0123456789")
+    with make_client(pg_dsn, llm, clock, frontend_dir=root) as c:
+        r = c.get("/media/hero-720.mp4", headers={"Range": "bytes=2-5"})
+        assert r.status_code == 206 and r.content == b"2345"  # browsers stream video with range requests
+        assert c.get("/media/missing.mp4").status_code == 404
+
+
 FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
 
 

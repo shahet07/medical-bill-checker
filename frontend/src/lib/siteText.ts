@@ -8,7 +8,7 @@ interface Titled {
 
 export interface SiteText {
   nav: { how: string; features: string; privacy: string; faq: string; open: string };
-  hero: { eyebrow: string; titleParts: [string, string, string]; lead: string; cta: string; secondary: string; points: string[] };
+  hero: { eyebrow: string; titleParts: [string, string, string]; lead: string; cta: string; secondary: string; points: string[]; pause: string; play: string };
   mock: {
     label: string;
     status: { checking: string; checked: string };
@@ -67,6 +67,8 @@ const en: SiteText = {
     cta: "Check my bill",
     secondary: "See how it works",
     points: ["PDF or phone photos", "English and Spanish", "Open source"],
+    pause: "Pause background video",
+    play: "Play background video",
   },
   mock: {
     label: "Example: a sample bill being checked",
@@ -237,6 +239,8 @@ const es: SiteText = {
     cta: "Revisar mi factura",
     secondary: "Ver cómo funciona",
     points: ["PDF o fotos del teléfono", "Inglés y español", "Código abierto"],
+    pause: "Pausar el video de fondo",
+    play: "Reproducir el video de fondo",
   },
   mock: {
     label: "Ejemplo: revisión de una factura de muestra",

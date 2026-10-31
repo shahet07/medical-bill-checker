@@ -3,6 +3,7 @@
 import { SITE_TEXT } from "@/lib/siteText";
 import Bento from "./Bento";
 import HeroScan from "./HeroScan";
+import HeroVideo from "./HeroVideo";
 import Journey from "./Journey";
 import Icon from "./Icon";
 import { CountUp, useReveal } from "./motion";
@@ -21,11 +22,7 @@ export default function Landing() {
       <main>
         {/* Hero: deep blue, serif headline, the bill being checked */}
         <section className="hero dark">
-          <div className="aurora" aria-hidden="true">
-            <i />
-            <i />
-            <i />
-          </div>
+          <HeroVideo pauseLabel={s.hero.pause} playLabel={s.hero.play} />
           <div className="site-wrap hero-grid">
             <div className="hero-copy">
               <p className="kicker">{s.hero.eyebrow}</p>
@@ -54,7 +51,6 @@ export default function Landing() {
                 ))}
               </ul>
             </div>
-            <HeroScan s={s} />
           </div>
         </section>
 
@@ -67,6 +63,9 @@ export default function Landing() {
               <a href="#how" className="circle-link">
                 {s.meet.link} <span aria-hidden="true">→</span>
               </a>
+            </div>
+            <div className="showcase reveal">
+              <HeroScan s={s} />
             </div>
             <Bento s={s} />
           </div>
