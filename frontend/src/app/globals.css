@@ -241,3 +241,16 @@ td.date { white-space: nowrap; color: var(--muted); }
 .skill { display: contents; }
 .skills dd { margin: 0; display: flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; }
 .skills meter { width: 140px; }
+
+/* Verification page */
+.verify-head { padding: 28px 0 8px; }
+.verify-head h1 { margin: 0 0 8px; }
+.card.status.ok { border-left: 5px solid var(--ok); }
+.card.status.bad { border-left: 5px solid var(--danger); }
+.card.status.ok h2 { color: var(--ok); }
+.card.status.bad h2 { color: var(--danger); }
+.fingerprints { margin-top: 14px; }
+.fingerprints code, .summary code { font-family: var(--mono); font-size: 0.8rem; overflow-wrap: anywhere; }
+.fingerprints ul { padding-left: 18px; font-size: 0.85rem; }
+#verify-letter { margin-top: 6px; }
+.small-print { font-size: 0.85rem; padding-bottom: 32px; }

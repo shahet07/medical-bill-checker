@@ -47,6 +47,7 @@ class Letter:
     kind: str  # see LETTER_KINDS
     subject: str
     text: str
+    verify_url: Optional[str] = None  # set when the letter has a signed evidence packet
 
 
 def long_date(d: date) -> str:
@@ -77,7 +78,13 @@ def itemized_request(bill: Bill, patient: Patient, today: date, note: Optional[s
 
 
 def dispute(
-    bill: Bill, eob: Optional[Eob], flags: List[Flag], patient: Patient, today: date, note: Optional[str] = None
+    bill: Bill,
+    eob: Optional[Eob],
+    flags: List[Flag],
+    patient: Patient,
+    today: date,
+    note: Optional[str] = None,
+    verify_url: Optional[str] = None,
 ) -> Letter:
     if not flags:
         raise ValueError("a dispute letter needs at least one flag")
@@ -97,7 +104,13 @@ def dispute(
         "charges are correct. If you have not already sent one, please also send an itemized bill. "
         "Please place the account on hold while this review is in progress.",
     ]
-    return _letter("dispute", "Request for review of charges", bill, eob, patient, today, body, note)
+    if verify_url:
+        body.append(
+            "You can confirm that the evidence quoted above matches the documents I received, and that this letter "
+            "has not been changed, at: " + verify_url
+        )
+    letter = _letter("dispute", "Request for review of charges", bill, eob, patient, today, body, note)
+    return Letter(letter.kind, letter.subject, letter.text, verify_url)
 
 
 def financial_assistance(bill: Bill, patient: Patient, today: date, note: Optional[str] = None) -> Letter:

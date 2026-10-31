@@ -49,6 +49,8 @@ from .llm import JsonLLM, make_llm
 from .models import Bill, Eob, Flag, Money
 from .pipeline import CaseRunner
 from .rag import MAX_QUESTION_CHARS, GeminiEmbedder, KnowledgeBase, answer_question
+from .packet import build_payload, new_packet_id, public_key_b64, sha256_hex, sign, signing_key
+from .packet import verify as verify_packet
 from .rehearsal import MAX_TURNS, Turn, opening, rep_reply, score_call, suggested_opener
 from .reference import Reference, load_pairs, load_prices
 from .store import Store, UserRow, load_key, pack_files
@@ -93,6 +95,7 @@ DEFAULT_LIMITS = {
     "account": (10, 3600),
     "ask": (30, 3600),
     "rehearse": (150, 3600),
+    "verify": (120, 3600),
 }
 
 
@@ -302,6 +305,8 @@ def create_app(settings: Settings) -> FastAPI:
     store = Store(settings.database_url, settings.key, now=settings.now)
     runner = CaseRunner(store, settings.llm, inline=settings.inline_jobs, reference=settings.reference)
     knowledge = settings.knowledge or KnowledgeBase()
+    packet_key = signing_key(settings.key)
+    packet_public = public_key_b64(packet_key)
     limiter = RateLimiter(settings.limits)
 
     @asynccontextmanager
@@ -515,7 +520,7 @@ def create_app(settings: Settings) -> FastAPI:
         except IngestError as exc:
             raise _error(422, exc.code, exc.message)
         mime = MIME[sniff_type(files[0])] if len(files) == 1 else "multipart/mixed"
-        row = store.add_upload(user.user_id, kind, mime, len(doc.pages), pack_files(files))
+        row = store.add_upload(user.user_id, kind, mime, len(doc.pages), pack_files(files), [sha256_hex(f) for f in files])
         store.record_event("upload", user.user_id, kind=kind, pages=row.page_count, files=len(files))
         return {"upload_id": row.upload_id, "kind": kind, "page_count": row.page_count, "expires_at": row.expires_at}
 
@@ -609,7 +614,7 @@ def create_app(settings: Settings) -> FastAPI:
         return {"case_id": case.case_id, "status": store.get_case(user.user_id, case.case_id).status}
 
     @app.post("/api/cases/{case_id}/letter")
-    def letter(case_id: str, body: LetterRequest, user: UserRow = Depends(current_user)):
+    def letter(case_id: str, body: LetterRequest, request: Request, user: UserRow = Depends(current_user)):
         limiter.check(user.user_id, "letter")
         case = own_case(case_id, user.user_id)
         if case.status != "ready":
@@ -640,7 +645,15 @@ def create_app(settings: Settings) -> FastAPI:
                     flags = [by_id[i] for i in body.flag_ids]
                 if not flags:
                     raise _error(422, "no_flags", "Choose at least one item to include in the letter.")
-                out = dispute(bill, eob, flags, patient, today, body.note)
+                packet_id = new_packet_id()
+                verify_url = "{}verify?id={}".format(str(request.base_url), packet_id)
+                out = dispute(bill, eob, flags, patient, today, body.note, verify_url=verify_url)
+                documents = [{"kind": "bill", "sha256": store.get_upload_hashes(case.bill_upload_id)}] + [
+                    {"kind": "eob", "sha256": store.get_upload_hashes(u)} for u in case.eob_upload_ids
+                ]
+                payload = build_payload(packet_id, settings.now(), bill, eob, flags, out.text, documents)
+                store.put_packet(packet_id, case.case_id, payload, sign(payload, packet_key))
+                store.record_event("packet_issued", user.user_id, items=len(flags))
         except ValueError:
             raise _error(422, "invalid_letter", "The letter could not be created from these details.")
         store.record_event("letter_created", user.user_id, kind=out.kind, format=body.format)
@@ -651,7 +664,7 @@ def create_app(settings: Settings) -> FastAPI:
                 media_type="application/pdf",
                 headers={"Content-Disposition": 'attachment; filename="{}"'.format(filename)},
             )
-        return {"kind": out.kind, "subject": out.subject, "text": out.text}
+        return {"kind": out.kind, "subject": out.subject, "text": out.text, "verify_url": out.verify_url}
 
     def ready_result(case_id: str, user_id: str):
         case = own_case(case_id, user_id)
@@ -757,6 +770,34 @@ def create_app(settings: Settings) -> FastAPI:
             "fallback": out.fallback,
             "tips": out.tips,
         }
+
+    # --- Public verification of dispute packets (no login) ----------------------------------
+
+    @app.get("/api/verify/key")
+    def verify_key():
+        return {"algorithm": "Ed25519", "public_key": packet_public}
+
+    @app.get("/api/verify/{packet_id}")
+    def verify_packet_endpoint(packet_id: str, request: Request):
+        limiter.check(client_ip(request), "verify")
+        row = store.get_packet(packet_id) if len(packet_id) <= 64 else None
+        if row is None:
+            raise _error(404, "not_found", "This verification link is not valid or has expired.")
+        payload = row["payload"]
+        return {
+            "payload": payload,
+            "signature": row["signature"],
+            "public_key": packet_public,
+            "algorithm": "Ed25519",
+            "signature_valid": verify_packet(payload, row["signature"], packet_public),
+        }
+
+    @app.get("/verify", include_in_schema=False)
+    def verify_page():
+        page = frontend / "verify.html" if frontend else None
+        if page is None or not page.is_file():
+            raise _error(404, "not_found", "Verification page not available.")
+        return FileResponse(page, headers={"Cache-Control": "no-cache"})
 
     @app.delete("/api/cases/{case_id}", status_code=204)
     def delete_case(case_id: str, user: UserRow = Depends(current_user)):

@@ -665,3 +665,53 @@ def test_rehearsal_validation(client, llm):
     assert client.post(url, json={"turns": [{"role": "boss", "text": "hi"}]}).status_code == 422
     assert client.post(url + "/score", json={"turns": []}).status_code == 422
     assert other_user(client).post(url, json={}).status_code == 404
+
+
+# --- Dispute packets ----------------------------------------------------------------------------
+
+
+def test_dispute_packet_issued_and_publicly_verifiable(client, llm):
+    import hashlib
+
+    case = BY_NAME["denial"]
+    bill_pdf, eob_pdf = render_bill(case.bill), render_eob(case.eob)
+    case_id = start_case(client, llm, "denial")
+    letter = client.post("/api/cases/{}/letter".format(case_id), json={"kind": "dispute", "patient": PATIENT}).json()
+    url = letter["verify_url"]
+    assert url.startswith("http://testserver/verify?id=") and url in letter["text"]
+    packet_id = url.split("id=")[1]
+
+    public = TestClient(client.app)  # not logged in
+    v = public.get("/api/verify/" + packet_id).json()
+    assert v["signature_valid"] is True and v["algorithm"] == "Ed25519"
+    assert v["public_key"] == public.get("/api/verify/key").json()["public_key"]
+    p = v["payload"]
+    assert p["documents"][0]["sha256"] == [hashlib.sha256(bill_pdf).hexdigest()]
+    assert p["documents"][1]["sha256"] == [hashlib.sha256(eob_pdf).hexdigest()]
+    assert p["letter_sha256"] == hashlib.sha256(letter["text"].encode()).hexdigest()
+    assert sorted(i["rule"] for i in p["items"]) == ["balance_mismatch", "billed_after_denial"]
+    for leak in ("Sam Example", "sam@example.com", "5432", "C-2026-0001", "Elm Street"):
+        assert leak not in str(v)
+
+
+def test_tampered_packet_is_reported_invalid(client, llm):
+    case_id = start_case(client, llm, "denial")
+    url = client.post("/api/cases/{}/letter".format(case_id), json={"kind": "dispute", "patient": PATIENT}).json()["verify_url"]
+    packet_id = url.split("id=")[1]
+    db_rows(client, "UPDATE packets SET payload = jsonb_set(payload, '{provider}', '\"Someone Else\"') RETURNING 1")
+    assert TestClient(client.app).get("/api/verify/" + packet_id).json()["signature_valid"] is False
+
+
+def test_packet_goes_with_its_case(client, llm):
+    case_id = start_case(client, llm, "denial")
+    url = client.post("/api/cases/{}/letter".format(case_id), json={"kind": "dispute", "patient": PATIENT}).json()["verify_url"]
+    packet_id = url.split("id=")[1]
+    client.delete("/api/cases/" + case_id)
+    assert TestClient(client.app).get("/api/verify/" + packet_id).status_code == 404
+    assert TestClient(client.app).get("/api/verify/nonexistent").status_code == 404
+
+
+def test_only_dispute_letters_get_packets(client, llm):
+    case_id = start_case(client, llm, "summary")
+    r = client.post("/api/cases/{}/letter".format(case_id), json={"kind": "itemized_request", "patient": PATIENT}).json()
+    assert r["verify_url"] is None and db_count(client, "packets") == 0
