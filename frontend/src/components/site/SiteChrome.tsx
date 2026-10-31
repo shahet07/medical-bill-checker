@@ -41,7 +41,7 @@ export function SiteHeader(props: { text: SiteText; lang?: Lang; onToggleLang?: 
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
   return (
-    <header className={"site-nav" + (scrolled ? " scrolled" : "")}>
+    <header className={"site-nav" + (scrolled ? " scrolled" : "") + (sections ? " overlay" : "")}>
       <div className="site-wrap site-nav-row">
         <a href="/" className="brand site-brand" aria-label="Clyvexa home">
           <img src="/icon.svg" alt="" width={36} height={36} className="brand-mark" />
@@ -57,11 +57,11 @@ export function SiteHeader(props: { text: SiteText; lang?: Lang; onToggleLang?: 
         </nav>
         <div className="site-nav-actions">
           {props.onToggleLang && (
-            <button type="button" className="small" lang={props.lang === "es" ? "en" : "es"} onClick={props.onToggleLang}>
+            <button type="button" className="lang-btn" lang={props.lang === "es" ? "en" : "es"} onClick={props.onToggleLang}>
               {text.langToggle}
             </button>
           )}
-          <a href="/app" className="button primary">
+          <a href="/app" className="pill-btn solid">
             {text.nav.open}
           </a>
         </div>
@@ -72,24 +72,39 @@ export function SiteHeader(props: { text: SiteText; lang?: Lang; onToggleLang?: 
 
 export function SiteFooter(props: { text: SiteText }) {
   const f = props.text.footer;
+  const n = props.text.nav;
   return (
     <footer className="site-foot">
       <div className="site-wrap">
         <div className="site-foot-row">
-          <div>
+          <div className="site-foot-brand">
             <a href="/" className="brand site-brand">
-              <img src="/icon.svg" alt="" width={28} height={28} className="brand-mark small" />
+              <img src="/icon.svg" alt="" width={36} height={36} className="brand-mark" />
               <span>Clyvexa</span>
             </a>
             <p>{f.tagline}</p>
           </div>
-          <nav aria-label="Footer" className="site-foot-links">
+          <nav aria-label={f.product} className="site-foot-col">
+            <h2>{f.product}</h2>
+            <a href="/app">{n.open}</a>
+            <a href="/#how">{n.how}</a>
+            <a href="/#features">{n.features}</a>
+            <a href="/#faq">{n.faq}</a>
+          </nav>
+          <nav aria-label={f.trust} className="site-foot-col">
+            <h2>{f.trust}</h2>
             <a href="/privacy">{f.privacy}</a>
             <a href="/terms">{f.terms}</a>
             <a href="/delete-account">{f.deletion}</a>
             <a href="/verify">{f.verify}</a>
+          </nav>
+          <nav aria-label={f.openSource} className="site-foot-col">
+            <h2>{f.openSource}</h2>
             <a href={SOURCE_URL} rel="noopener">
               {f.source}
+            </a>
+            <a href={SOURCE_URL + "/blob/main/LICENSE"} rel="noopener">
+              {f.license}
             </a>
           </nav>
         </div>

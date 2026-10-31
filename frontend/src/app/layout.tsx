@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Figtree, Fraunces } from "next/font/google";
 import "./globals.css";
 import "./site.css";
 
@@ -21,9 +22,13 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#1f5fbf" };
 
+// Fonts are downloaded at build time and served from this site (no third-party requests).
+const serif = Fraunces({ subsets: ["latin"], variable: "--font-serif", display: "swap" });
+const sans = Figtree({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={serif.variable + " " + sans.variable}>
       <body>{children}</body>
     </html>
   );

@@ -1,15 +1,13 @@
 "use client";
 
 import { SITE_TEXT } from "@/lib/siteText";
+import Bento from "./Bento";
 import HeroScan from "./HeroScan";
+import HowSteps from "./HowSteps";
 import Icon from "./Icon";
 import { CountUp, useReveal } from "./motion";
 import { SiteFooter, SiteHeader, useSiteLang } from "./SiteChrome";
 
-// Icons in the same order as the text lists in siteText.ts.
-const STEP_ICONS = ["upload", "eye", "send"];
-const CHECK_ICONS = ["duplicate", "mismatch", "denied", "network", "missing", "payment", "unbundled", "itemized"];
-const FEATURE_ICONS = ["letter", "phone", "refund", "radar", "ask", "words"];
 const PRIVACY_ICONS = ["lock", "clock", "trash", "user", "device"];
 
 export default function Landing() {
@@ -21,7 +19,8 @@ export default function Landing() {
     <div className="site">
       <SiteHeader text={s} lang={lang} onToggleLang={() => setLang(lang === "es" ? "en" : "es")} sections />
       <main>
-        <section className="site-hero">
+        {/* Hero: deep blue, serif headline, the bill being checked */}
+        <section className="hero dark">
           <div className="aurora" aria-hidden="true">
             <i />
             <i />
@@ -29,29 +28,27 @@ export default function Landing() {
           </div>
           <div className="site-wrap hero-grid">
             <div className="hero-copy">
-              <h1>
+              <p className="kicker">{s.hero.eyebrow}</p>
+              <h1 className="display">
                 {before}
-                <span className="hl">
+                <em className="hl">
                   {highlight}
                   <svg viewBox="0 0 200 16" preserveAspectRatio="none" aria-hidden="true">
                     <path d="M3 11C40 4 120 3 197 8" />
                   </svg>
-                </span>
+                </em>
                 {after}
               </h1>
               <p className="lead">{s.hero.lead}</p>
               <div className="hero-actions">
-                <a href="/app" className="button primary large shine">
-                  {s.hero.cta}
-                  <span aria-hidden="true" className="arrow">
-                    →
-                  </span>
+                <a href="/app" className="pill-btn light">
+                  {s.hero.cta} <span className="arrow-dot" aria-hidden="true">→</span>
                 </a>
-                <a href="#how" className="button large ghost">
+                <a href="#how" className="pill-btn outline">
                   {s.hero.secondary}
                 </a>
               </div>
-              <ul className="hero-points">
+              <ul className="glass-pills">
                 {s.hero.points.map((p) => (
                   <li key={p}>{p}</li>
                 ))}
@@ -61,73 +58,78 @@ export default function Landing() {
           </div>
         </section>
 
-        <section className="stats-band" aria-label="Clyvexa in numbers">
-          <ul className="site-wrap stats reveal stagger">
-            {s.stats.map((st) => (
-              <li key={st.label}>
-                <strong>
-                  <CountUp value={st.value} suffix={st.suffix} />
-                </strong>
-                <span>{st.label}</span>
-              </li>
-            ))}
-          </ul>
+        {/* Meet + feature bento */}
+        <section id="features" className="section tint">
+          <div className="site-wrap">
+            <div className="center-head reveal">
+              <h2 className="display">{s.meet.title}</h2>
+              <p className="lead">{s.meet.lead}</p>
+              <a href="#how" className="circle-link">
+                {s.meet.link} <span aria-hidden="true">→</span>
+              </a>
+            </div>
+            <Bento s={s} />
+          </div>
         </section>
 
-        <section id="how" className="site-section">
+        {/* How it works: a timeline with a picture of each step */}
+        <section id="how" className="section warm">
           <div className="site-wrap">
-            <h2 className="reveal">{s.how.title}</h2>
-            <ol className="steps reveal stagger">
-              {s.how.steps.map((step, i) => (
-                <li key={step.title}>
-                  <span className="step-num" aria-hidden="true">
-                    <Icon name={STEP_ICONS[i]} />
-                    <b>{i + 1}</b>
-                  </span>
-                  <h3>{step.title}</h3>
-                  <p>{step.body}</p>
+            <p className="kicker reveal">{s.how.label}</p>
+            <h2 className="display reveal">{s.how.title}</h2>
+            <div className="reveal">
+              <HowSteps s={s} />
+            </div>
+          </div>
+        </section>
+
+        {/* What it checks: numbered list */}
+        <section id="checks" className="section">
+          <div className="site-wrap checks-grid">
+            <div className="reveal sticky-head">
+              <h2 className="display">{s.checks.title}</h2>
+              <p className="lead">{s.checks.lead}</p>
+            </div>
+            <ol className="check-list reveal stagger">
+              {s.checks.items.map((c, i) => (
+                <li key={c.title}>
+                  <span className="check-num">{String(i + 1).padStart(2, "0")}</span>
+                  <div>
+                    <h3>{c.title}</h3>
+                    <p>{c.body}</p>
+                  </div>
                 </li>
               ))}
             </ol>
           </div>
         </section>
 
-        <section id="checks" className="site-section alt">
-          <div className="site-wrap">
-            <h2 className="reveal">{s.checks.title}</h2>
-            <p className="section-lead reveal">{s.checks.lead}</p>
-            <ul className="tiles reveal stagger">
-              {s.checks.items.map((c, i) => (
-                <li key={c.title}>
-                  <span className="tile-icon warn">
-                    <Icon name={CHECK_ICONS[i]} />
-                  </span>
-                  <h3>{c.title}</h3>
-                  <p>{c.body}</p>
+        {/* Mission statement and numbers */}
+        <section className="section dark band">
+          <div className="site-wrap band-grid">
+            <div className="reveal">
+              <span className="band-mark">
+                <img src="/icon.svg" alt="" width={52} height={52} />
+              </span>
+              <p className="band-label">{s.mission.label}</p>
+              <blockquote className="display quote">{s.mission.quote}</blockquote>
+              <p className="band-body">{s.mission.body}</p>
+            </div>
+            <ul className="stat-cards reveal stagger">
+              {s.stats.map((st) => (
+                <li key={st.label}>
+                  <strong className="display">
+                    <CountUp value={st.value} suffix={st.suffix} />
+                  </strong>
+                  <span>{st.label}</span>
                 </li>
               ))}
             </ul>
           </div>
         </section>
 
-        <section id="features" className="site-section">
-          <div className="site-wrap">
-            <h2 className="reveal">{s.features.title}</h2>
-            <ul className="tiles three reveal stagger">
-              {s.features.items.map((c, i) => (
-                <li key={c.title}>
-                  <span className="tile-icon">
-                    <Icon name={FEATURE_ICONS[i]} />
-                  </span>
-                  <h3>{c.title}</h3>
-                  <p>{c.body}</p>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </section>
-
-        <section id="privacy" className="site-section alt">
+        {/* Privacy */}
+        <section id="privacy" className="section tint">
           <div className="site-wrap privacy-grid">
             <div className="reveal">
               <svg className="padlock" viewBox="0 0 64 64" aria-hidden="true">
@@ -136,16 +138,16 @@ export default function Landing() {
                 <circle cx="32" cy="41" r="4" />
                 <path d="M32 45v5" />
               </svg>
-              <h2>{s.privacy.title}</h2>
-              <p className="section-lead">{s.privacy.lead}</p>
-              <a href="/privacy" className="text-link">
+              <h2 className="display">{s.privacy.title}</h2>
+              <p className="lead">{s.privacy.lead}</p>
+              <a href="/privacy" className="circle-link">
                 {s.privacy.link} <span aria-hidden="true">→</span>
               </a>
             </div>
-            <ul className="checklist reveal stagger">
+            <ul className="assure reveal stagger">
               {s.privacy.items.map((p, i) => (
                 <li key={p}>
-                  <span className="tile-icon ok">
+                  <span className="assure-icon">
                     <Icon name={PRIVACY_ICONS[i]} />
                   </span>
                   <span>{p}</span>
@@ -155,15 +157,18 @@ export default function Landing() {
           </div>
         </section>
 
-        <section id="faq" className="site-section">
+        {/* FAQ */}
+        <section id="faq" className="section">
           <div className="site-wrap narrow">
-            <h2 className="reveal">{s.faq.title}</h2>
+            <h2 className="display reveal">{s.faq.title}</h2>
             <div className="reveal stagger">
               {s.faq.items.map((item) => (
                 <details key={item.q} className="faq">
                   <summary>
                     {item.q}
-                    <Icon name="chevron" className="chev" />
+                    <span className="faq-toggle" aria-hidden="true">
+                      <Icon name="chevron" className="chev" />
+                    </span>
                   </summary>
                   <p>{item.a}</p>
                 </details>
@@ -172,17 +177,28 @@ export default function Landing() {
           </div>
         </section>
 
-        <section className="site-cta">
-          <div className="site-wrap reveal">
-            <img src="/icon.svg" alt="" width={64} height={64} className="cta-mark" />
-            <h2>{s.cta.title}</h2>
-            <p>{s.cta.body}</p>
-            <a href="/app" className="button large light shine">
-              {s.cta.button}
-              <span aria-hidden="true" className="arrow">
-                →
-              </span>
+        {/* Closing call to action with floating findings */}
+        <section className="section dark finale">
+          <div className="floats" aria-hidden="true">
+            {s.cta.floats.map(([a, b], i) => (
+              <div className={"float f" + i} key={a}>
+                <span className="dot" />
+                <span>{a}</span>
+                <em>{b}</em>
+              </div>
+            ))}
+          </div>
+          <div className="site-wrap finale-inner reveal">
+            <h2 className="display">{s.cta.title}</h2>
+            <p className="lead">{s.cta.body}</p>
+            <a href="/app" className="pill-btn light big">
+              {s.cta.button} <span className="arrow-dot" aria-hidden="true">→</span>
             </a>
+            <ul className="glass-pills center">
+              {s.cta.pills.map((p) => (
+                <li key={p}>{p}</li>
+              ))}
+            </ul>
           </div>
         </section>
       </main>
