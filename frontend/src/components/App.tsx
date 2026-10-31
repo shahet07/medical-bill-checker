@@ -208,6 +208,7 @@ export default function App() {
 
   return (
     <AppProvider lang={lang} setError={setError} onLoginRequired={onLoginRequired}>
+      <div className="app-shell">
       <Header
         user={user}
         showUserMenu={!!user && view !== "auth"}
@@ -260,6 +261,7 @@ export default function App() {
         />
       </main>
       <Footer />
+      </div>
     </AppProvider>
   );
 }

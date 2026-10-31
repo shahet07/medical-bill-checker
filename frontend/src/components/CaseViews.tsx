@@ -6,6 +6,30 @@ import { money, parseAmount, shortDate } from "@/lib/format";
 import type { CaseData, CaseSummary } from "@/lib/types";
 import { RadarSearch } from "./Radar";
 import { checkPhoto } from "@/lib/photoCheck";
+import { STATIC_ONLY, at } from "@/lib/base";
+
+const DEMO_TEXT = {
+  en: {
+    kicker: "Demo",
+    title: "Try it with a sample bill",
+    body: "This demo checks a made-up bill and insurance statement (EOB). What you'll see is a real check of this sample by Clyvexa. The demo doesn't read or upload any files.",
+    button: "Check the sample bill",
+    bill: "Sample bill",
+    eob: "Sample EOB",
+    own: "To check your own bill, run the full app. Instructions are in the",
+    readme: "README",
+  },
+  es: {
+    kicker: "Demostración",
+    title: "Pruébelo con una factura de muestra",
+    body: "Esta demostración revisa una factura y un estado de cuenta del seguro (EOB) inventados. Lo que verá es una revisión real de esta muestra hecha por Clyvexa. La demostración no lee ni sube ningún archivo.",
+    button: "Revisar la factura de muestra",
+    bill: "Factura de muestra",
+    eob: "EOB de muestra",
+    own: "Para revisar su propia factura, use la aplicación completa. Las instrucciones están en el",
+    readme: "README",
+  },
+};
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 const MAX_FILES = 10;
@@ -116,10 +140,59 @@ export function UploadView(props: {
     }
   };
 
+  // Demo build: check the recorded sample (no files are read).
+  const runSample = async () => {
+    setError("");
+    setBusy(true);
+    try {
+      const sample = (kind: string) => {
+        const form = new FormData();
+        form.append("kind", kind);
+        return call<{ upload_id: string }>("POST", "/api/uploads", form);
+      };
+      const bill = await sample("bill");
+      const eob = await sample("eob");
+      await createCase(bill.upload_id, [eob.upload_id]);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const demo = DEMO_TEXT[lang];
+
   return (
     <section id="upload-view" className="card" hidden={props.hidden}>
-      <h2>{ts("upload_title")}</h2>
-      <form id="upload-form" noValidate ref={formRef} onSubmit={submit} onChange={(e) => {
+      {STATIC_ONLY ? (
+        <div className="demo-panel">
+          <p className="kicker">{demo.kicker}</p>
+          <h2>{demo.title}</h2>
+          <p className="demo-body">{demo.body}</p>
+          <div className="demo-docs">
+            <figure>
+              <img src={at("/demo/sample-bill.jpg")} alt={demo.bill} width={832} height={556} />
+              <figcaption>{demo.bill}</figcaption>
+            </figure>
+            <figure>
+              <img src={at("/demo/sample-eob.jpg")} alt={demo.eob} width={900} height={400} />
+              <figcaption>{demo.eob}</figcaption>
+            </figure>
+          </div>
+          <button id="demo-run" type="button" className="primary big" disabled={busy} onClick={runSample}>
+            {demo.button} <span aria-hidden="true">→</span>
+          </button>
+          <p className="hint">
+            {demo.own}{" "}
+            <a href="https://github.com/shahet07/medical-bill-checker#readme" rel="noopener">
+              {demo.readme}
+            </a>
+            .
+          </p>
+        </div>
+      ) : (
+        <h2>{ts("upload_title")}</h2>
+      )}
+      <form id="upload-form" hidden={STATIC_ONLY} noValidate ref={formRef} onSubmit={submit} onChange={(e) => {
         if ((e.target as HTMLElement).matches?.('input[type="file"]')) checkOnDevice();
       }}>
         <div className="field">
@@ -200,7 +273,7 @@ export function UploadView(props: {
           </div>
         </div>
       ) : null}
-      <p className="privacy">{ts("privacy")}</p>
+      <p className="privacy" hidden={STATIC_ONLY}>{ts("privacy")}</p>
       {props.loggedIn && !props.hidden ? <History refreshKey={props.historyKey} onOpenCase={props.onOpenCase} /> : null}
       {props.loggedIn && !props.hidden ? <RadarSearch /> : null}
     </section>
@@ -242,8 +315,14 @@ function History(props: { refreshKey: number; onOpenCase: (id: string) => void }
 
 // --- Working, confirming, failed ----------------------------------------------------------
 
+// Shown while checking; the ticks are paced by CSS, the real status is the text below.
+const STATUS_STEPS = {
+  en: ["Reading the bill", "Reading your EOB", "Comparing line by line", "Writing it in plain words"],
+  es: ["Leyendo la factura", "Leyendo su EOB", "Comparando línea por línea", "Explicándolo en palabras sencillas"],
+};
+
 export function StatusView(props: { hidden: boolean; caseData: CaseData | null; onCancel: () => void }) {
-  const { t, ts } = useApp();
+  const { lang, t, ts } = useApp();
   const c = props.caseData;
   const text =
     c && c.status === "queued" && c.error_code === "llm_unavailable"
@@ -252,8 +331,32 @@ export function StatusView(props: { hidden: boolean; caseData: CaseData | null; 
         ? t("status_waiting")
         : t("status_reading");
   return (
-    <section id="status-view" className="card" hidden={props.hidden}>
+    <section id="status-view" className="card status-card" hidden={props.hidden}>
       <h2>{ts("checking_title")}</h2>
+      <div className="scanner" aria-hidden="true">
+        <div className="scan-doc">
+          <i />
+          <i />
+          <i className="hit" />
+          <i />
+          <i className="hit" />
+          <i className="short" />
+        </div>
+        <div className="scan-glass">
+          <svg viewBox="0 0 40 40">
+            <path d="M28 12.5A10.5 10.5 0 1 0 28 27.5" />
+            <path d="M27.5 29l5 5" />
+          </svg>
+        </div>
+        <ol className="scan-steps">
+          {STATUS_STEPS[lang].map((step, i) => (
+            <li key={step} className={"s" + i}>
+              <span className="tick" />
+              {step}
+            </li>
+          ))}
+        </ol>
+      </div>
       <div className="status-row">
         <span className="spinner" aria-hidden="true" />
         <p id="status-text" aria-live="polite">{text}</p>

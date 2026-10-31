@@ -6,5 +6,5 @@ import { STATIC_ONLY } from "@/lib/base";
 export const metadata: Metadata = { title: "Verify a billing letter · Clyvexa" };
 
 export default function VerifyPage() {
-  return STATIC_ONLY ? <NotHosted what="verify" /> : <VerifyPacket />;
+  return STATIC_ONLY ? <NotHosted /> : <VerifyPacket />;
 }

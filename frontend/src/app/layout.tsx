@@ -3,6 +3,7 @@ import { Figtree, Fraunces } from "next/font/google";
 import { at } from "@/lib/base";
 import "./globals.css";
 import "./site.css";
+import "./app.css";
 
 // The public address, for absolute links in social previews. Set SITE_URL when building for a real domain.
 const siteUrl = process.env.SITE_URL;

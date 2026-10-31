@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useApp } from "@/lib/app";
-import { apiBlob, saveBlob } from "@/lib/api";
+import { ApiError, apiBlob, saveBlob } from "@/lib/api";
+import { demoOnly } from "@/lib/demo";
 import { money, parseAmount, shortDate } from "@/lib/format";
 import { GLOSSARY } from "@/lib/i18n";
 import type { AskResult, CaseData, Flag, Letter, LineItem, Source } from "@/lib/types";
@@ -512,8 +513,8 @@ function LetterCard(props: { c: CaseData; caseId: string; included: Set<string> 
     setPdfBusy(true);
     try {
       saveBlob(await apiBlob("/api/cases/" + props.caseId + "/letter", { ...lastRequest, format: "pdf" }), filename("pdf"));
-    } catch {
-      setError(t("err_pdf"));
+    } catch (e) {
+      setError(e instanceof ApiError && e.code === "demo" ? demoOnly(lang) : t("err_pdf"));
     } finally {
       setPdfBusy(false);
     }

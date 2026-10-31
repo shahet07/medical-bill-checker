@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import App from "@/components/App";
-import NotHosted from "@/components/site/NotHosted";
-import { STATIC_ONLY } from "@/lib/base";
 
 export const metadata: Metadata = { title: "Check my bill · Clyvexa" };
 
+// On the website-only build (GitHub Pages) the app runs in demo mode (see lib/demo.ts).
 export default function AppPage() {
-  return STATIC_ONLY ? <NotHosted what="app" /> : <App />;
+  return <App />;
 }

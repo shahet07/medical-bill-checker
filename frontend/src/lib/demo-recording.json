@@ -1,0 +1,1221 @@
+[
+ {
+  "method": "GET",
+  "path": "/api/auth/session",
+  "query": "",
+  "status": 200,
+  "request": null,
+  "response": {
+   "user": null
+  }
+ },
+ {
+  "method": "POST",
+  "path": "/api/auth/register",
+  "query": "",
+  "status": 201,
+  "request": {
+   "email": "demo@clyvexa.example",
+   "password": "correct horse battery",
+   "research_consent": false,
+   "radar_consent": false
+  },
+  "response": {
+   "email": "demo@clyvexa.example",
+   "research_consent": false,
+   "radar_consent": false,
+   "created_at": "2026-10-31T14:27:04.540386-04:00"
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/cases",
+  "query": "",
+  "status": 200,
+  "request": null,
+  "response": {
+   "cases": []
+  }
+ },
+ {
+  "method": "POST",
+  "path": "/api/uploads",
+  "query": "",
+  "status": 201,
+  "request": null,
+  "response": {
+   "upload_id": "b1d7120b3f4ecefa139abdf4fd875a99",
+   "kind": "bill",
+   "page_count": 1,
+   "expires_at": "2026-11-01T18:27:04.633047+00:00",
+   "quality": []
+  }
+ },
+ {
+  "method": "POST",
+  "path": "/api/uploads",
+  "query": "",
+  "status": 201,
+  "request": null,
+  "response": {
+   "upload_id": "c05725ae0ca56f25e66853424b817188",
+   "kind": "eob",
+   "page_count": 1,
+   "expires_at": "2026-11-01T18:27:04.648337+00:00",
+   "quality": []
+  }
+ },
+ {
+  "method": "POST",
+  "path": "/api/cases",
+  "query": "",
+  "status": 201,
+  "request": {
+   "bill_upload_id": "b1d7120b3f4ecefa139abdf4fd875a99",
+   "eob_upload_ids": [
+    "c05725ae0ca56f25e66853424b817188"
+   ],
+   "language": "en"
+  },
+  "response": {
+   "case_id": "demo-case",
+   "status": "queued"
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/cases/demo-case",
+  "query": "",
+  "status": 200,
+  "request": null,
+  "response": {
+   "case_id": "demo-case",
+   "status": "extracting",
+   "error_code": null,
+   "expires_at": "2027-01-29T18:27:04.652647+00:00",
+   "language": "en"
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/cases/demo-case",
+  "query": "",
+  "status": 200,
+  "request": null,
+  "response": {
+   "case_id": "demo-case",
+   "status": "extracting",
+   "error_code": null,
+   "expires_at": "2027-01-29T18:27:04.652647+00:00",
+   "language": "en"
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/cases/demo-case",
+  "query": "",
+  "status": 200,
+  "request": null,
+  "response": {
+   "case_id": "demo-case",
+   "status": "ready",
+   "error_code": null,
+   "expires_at": "2027-01-29T18:27:04.652647+00:00",
+   "language": "en",
+   "bill": {
+    "schema_version": "1.0",
+    "provider_name": "Riverside Medical Group",
+    "account_number_redacted": "****432",
+    "statement_date": "2026-04-01",
+    "dates_of_service": {
+     "start": "2026-03-04",
+     "end": "2026-03-04"
+    },
+    "line_items": [
+     {
+      "line_id": "L1",
+      "service_date": "2026-03-04",
+      "description": "Office visit, established patient",
+      "code": "99213",
+      "code_type": "CPT",
+      "units": "1",
+      "charge": "150.00",
+      "source_page": 1,
+      "source_text": "03/04/2026 99213 Office visit, established patient 1 $150.00"
+     },
+     {
+      "line_id": "L2",
+      "service_date": "2026-03-04",
+      "description": "Complete blood count",
+      "code": "85025",
+      "code_type": "CPT",
+      "units": "1",
+      "charge": "40.00",
+      "source_page": 1,
+      "source_text": "03/04/2026 85025 Complete blood count 1 $40.00"
+     },
+     {
+      "line_id": "L3",
+      "service_date": "2026-03-04",
+      "description": "Venipuncture",
+      "code": "36415",
+      "code_type": "CPT",
+      "units": "1",
+      "charge": "15.00",
+      "source_page": 1,
+      "source_text": "03/04/2026 36415 Venipuncture 1 $15.00"
+     }
+    ],
+    "totals": {
+     "billed": "205.00",
+     "adjustments": "-125.00",
+     "patient_balance": "80.00",
+     "source": {
+      "page": 1,
+      "text": "Amount due $80.00"
+     }
+    },
+    "itemized": true,
+    "out_of_network_marker": null,
+    "extraction_confidence": "high"
+   },
+   "eob": {
+    "schema_version": "1.0",
+    "insurer": "Example Health Plan",
+    "claim_id": "C-2026-0001",
+    "service_lines": [
+     {
+      "line_id": "E1",
+      "service_date": "2026-03-04",
+      "code": "99213",
+      "billed": "150.00",
+      "allowed": "100.00",
+      "insurer_paid": "80.00",
+      "patient_responsibility": "20.00",
+      "status": "processed",
+      "denial_reason": null,
+      "network_status": "in_network",
+      "source_page": 1,
+      "source_text": "03/04/2026 99213 $150.00 $100.00 $80.00 $20.00 Processed"
+     },
+     {
+      "line_id": "E2",
+      "service_date": "2026-03-04",
+      "code": "85025",
+      "billed": "40.00",
+      "allowed": "0.00",
+      "insurer_paid": "0.00",
+      "patient_responsibility": "0.00",
+      "status": "denied",
+      "denial_reason": "Not medically necessary (CO-50)",
+      "network_status": "in_network",
+      "source_page": 1,
+      "source_text": "03/04/2026 85025 $40.00 $0.00 $0.00 $0.00 Denied: Not medically necessary (CO-50)"
+     },
+     {
+      "line_id": "E3",
+      "service_date": "2026-03-04",
+      "code": "36415",
+      "billed": "15.00",
+      "allowed": "10.00",
+      "insurer_paid": "5.00",
+      "patient_responsibility": "5.00",
+      "status": "processed",
+      "denial_reason": null,
+      "network_status": "in_network",
+      "source_page": 1,
+      "source_text": "03/04/2026 36415 $15.00 $10.00 $5.00 $5.00 Processed"
+     }
+    ],
+    "totals": {
+     "patient_responsibility": "25.00",
+     "source": {
+      "page": 1,
+      "text": "Total you may owe the provider $25.00"
+     }
+    }
+   },
+   "eob_status": "ok",
+   "flags": [
+    {
+     "flag_id": "balance_mismatch:bill.totals,eob.totals",
+     "rule": "balance_mismatch",
+     "severity": "check",
+     "confidence": "high",
+     "summary": "The bill asks you to pay $80.00, but your insurer's EOB says your responsibility is $25.00 (a difference of $55.00). This needs checking.",
+     "evidence": [
+      {
+       "source": "bill",
+       "ref": "totals",
+       "page": 1,
+       "text": "Amount due $80.00"
+      },
+      {
+       "source": "eob",
+       "ref": "totals",
+       "page": 1,
+       "text": "Total you may owe the provider $25.00"
+      }
+     ]
+    },
+    {
+     "flag_id": "billed_after_denial:bill.L2,eob.E2",
+     "rule": "billed_after_denial",
+     "severity": "review",
+     "confidence": "medium",
+     "summary": "Line L2 (85025, 2026-03-04) is on your bill, but your EOB shows the insurer denied this service. Reason given: Not medically necessary (CO-50). Check whether you should be billed for it.",
+     "evidence": [
+      {
+       "source": "bill",
+       "ref": "L2",
+       "page": 1,
+       "text": "03/04/2026 85025 Complete blood count 1 $40.00"
+      },
+      {
+       "source": "eob",
+       "ref": "E2",
+       "page": 1,
+       "text": "03/04/2026 85025 $40.00 $0.00 $0.00 $0.00 Denied: Not medically necessary (CO-50)"
+      }
+     ]
+    }
+   ],
+   "explanations": {
+    "lines": {
+     "L1": {
+      "text": "This is a routine check-in with your regular doctor to talk about your health. It covers your time spent talking with the medical team.",
+      "source": "llm"
+     },
+     "L2": {
+      "text": "This is a standard blood test to check different parts of your blood, like your red and white blood cells. It helps your doctor see how your body is doing overall.",
+      "source": "llm"
+     },
+     "L3": {
+      "text": "This is the fee for drawing your blood for testing. It covers the helper taking the sample from your arm.",
+      "source": "llm"
+     }
+    },
+    "flags": {
+     "balance_mismatch:bill.totals,eob.totals": {
+      "text": "The amount the doctor's office is asking you to pay does not match the amount listed on your insurance summary. It is a good idea to compare both papers to make sure everyone is on the same page.",
+      "source": "llm"
+     },
+     "billed_after_denial:bill.L2,eob.E2": {
+      "text": "Your insurance paperwork shows they did not pay for one of your blood tests because they felt it was not needed. You may want to check with your insurance company to understand why they did not cover it.",
+      "source": "llm"
+     }
+    }
+   },
+   "problems": [],
+   "warnings": [],
+   "user_edited": false,
+   "price_context": {},
+   "prices_label": null,
+   "radar": [],
+   "error_message": null
+  }
+ },
+ {
+  "method": "POST",
+  "path": "/api/ask",
+  "query": "",
+  "status": 200,
+  "request": {
+   "question": "Why does my bill not match my EOB?",
+   "case_id": "demo-case",
+   "language": "en"
+  },
+  "response": {
+   "answer": "Your bill asks you to pay 80.00 dollars, but your insurance EOB says you may only owe 25.00 dollars. This difference can happen if the provider has not yet applied the insurance payment or adjustment to your bill, if the bill includes other visits, or if there is a billing error. Also, one of your services was denied by your insurer, which can affect the balance. To check this, match each service on your bill to your EOB by date and code, and call your billing office with both documents in front of you.",
+   "fallback": false,
+   "sources": [
+    {
+     "title": "How to read an Explanation of Benefits (EOB)",
+     "section": "What an EOB is",
+     "source_name": "HealthCare.gov glossary",
+     "source_url": "https://www.healthcare.gov/glossary/"
+    },
+    {
+     "title": "How to read an Explanation of Benefits (EOB)",
+     "section": "Comparing the EOB with your bill",
+     "source_name": "HealthCare.gov glossary",
+     "source_url": "https://www.healthcare.gov/glossary/"
+    },
+    {
+     "title": "What the checks in this tool mean",
+     "section": "Balance and payment checks",
+     "source_name": "Clyvexa",
+     "source_url": "https://github.com/shahet07/medical-bill-checker"
+    }
+   ],
+   "related": [
+    {
+     "title": "How to read an Explanation of Benefits (EOB)",
+     "section": "What an EOB is",
+     "source_name": "HealthCare.gov glossary",
+     "source_url": "https://www.healthcare.gov/glossary/"
+    },
+    {
+     "title": "How to read an Explanation of Benefits (EOB)",
+     "section": "Comparing the EOB with your bill",
+     "source_name": "HealthCare.gov glossary",
+     "source_url": "https://www.healthcare.gov/glossary/"
+    },
+    {
+     "title": "What the checks in this tool mean",
+     "section": "Balance and payment checks",
+     "source_name": "Clyvexa",
+     "source_url": "https://github.com/shahet07/medical-bill-checker"
+    }
+   ]
+  }
+ },
+ {
+  "method": "POST",
+  "path": "/api/ask",
+  "query": "",
+  "status": 200,
+  "request": {
+   "question": "How do I appeal a denied claim?",
+   "case_id": "demo-case",
+   "language": "en"
+  },
+  "response": {
+   "answer": "To appeal a denied claim, start by calling your provider's billing office to see if the claim can be corrected and resubmitted, and call your insurer to find out why it was denied. For most plans, you can ask for an internal appeal by filing within 180 days of getting the denial notice. Include a letter, your EOB, and supporting records or a doctor's letter. The insurer must decide within 30 days for services you have not received yet, within 60 days for services already received, or within 72 hours for urgent cases. If the internal appeal is denied, you can usually ask for an external review by an independent reviewer within 4 months of the final internal denial. Because rules can vary, check your plan documents or ask your insurer about the rules that apply to you.",
+   "fallback": false,
+   "sources": [
+    {
+     "title": "Denied claims and how to appeal",
+     "section": "Why claims get denied",
+     "source_name": "HealthCare.gov, Appealing a health plan decision",
+     "source_url": "https://www.healthcare.gov/appeal-insurance-company-decision/"
+    },
+    {
+     "title": "Denied claims and how to appeal",
+     "section": "Fixing simple denials first",
+     "source_name": "HealthCare.gov, Appealing a health plan decision",
+     "source_url": "https://www.healthcare.gov/appeal-insurance-company-decision/"
+    },
+    {
+     "title": "Denied claims and how to appeal",
+     "section": "Internal appeal",
+     "source_name": "HealthCare.gov, Appealing a health plan decision",
+     "source_url": "https://www.healthcare.gov/appeal-insurance-company-decision/"
+    },
+    {
+     "title": "Denied claims and how to appeal",
+     "section": "External review",
+     "source_name": "HealthCare.gov, Appealing a health plan decision",
+     "source_url": "https://www.healthcare.gov/appeal-insurance-company-decision/"
+    }
+   ],
+   "related": [
+    {
+     "title": "Denied claims and how to appeal",
+     "section": "Why claims get denied",
+     "source_name": "HealthCare.gov, Appealing a health plan decision",
+     "source_url": "https://www.healthcare.gov/appeal-insurance-company-decision/"
+    },
+    {
+     "title": "Denied claims and how to appeal",
+     "section": "Fixing simple denials first",
+     "source_name": "HealthCare.gov, Appealing a health plan decision",
+     "source_url": "https://www.healthcare.gov/appeal-insurance-company-decision/"
+    },
+    {
+     "title": "Denied claims and how to appeal",
+     "section": "Internal appeal",
+     "source_name": "HealthCare.gov, Appealing a health plan decision",
+     "source_url": "https://www.healthcare.gov/appeal-insurance-company-decision/"
+    }
+   ]
+  }
+ },
+ {
+  "method": "POST",
+  "path": "/api/ask",
+  "query": "",
+  "status": 200,
+  "request": {
+   "question": "Can I get financial assistance?",
+   "case_id": "demo-case",
+   "language": "en"
+  },
+  "response": {
+   "answer": "Many hospitals offer free or discounted care based on your income, which is often called charity care or financial assistance. Nonprofit hospitals must have a written financial assistance policy, publicize it, and provide an application. You can apply even if you have insurance and even after you get a bill. To apply, ask the billing office for the policy and application, or check their website. You will usually need to show proof of your income and household size. You can also ask them to put your account on hold while they look at your application.",
+   "fallback": false,
+   "sources": [
+    {
+     "title": "Financial assistance and charity care",
+     "section": "Who offers it",
+     "source_name": "IRS, Requirements for 501(c)(3) hospitals under the Affordable Care Act",
+     "source_url": "https://www.irs.gov/charities-non-profits/charitable-organizations/requirements-for-501c3-hospitals-under-the-affordable-care-act-section-501r"
+    },
+    {
+     "title": "Financial assistance and charity care",
+     "section": "How to apply",
+     "source_name": "IRS, Requirements for 501(c)(3) hospitals under the Affordable Care Act",
+     "source_url": "https://www.irs.gov/charities-non-profits/charitable-organizations/requirements-for-501c3-hospitals-under-the-affordable-care-act-section-501r"
+    }
+   ],
+   "related": [
+    {
+     "title": "Financial assistance and charity care",
+     "section": "Who offers it",
+     "source_name": "IRS, Requirements for 501(c)(3) hospitals under the Affordable Care Act",
+     "source_url": "https://www.irs.gov/charities-non-profits/charitable-organizations/requirements-for-501c3-hospitals-under-the-affordable-care-act-section-501r"
+    },
+    {
+     "title": "Financial assistance and charity care",
+     "section": "How to apply",
+     "source_name": "IRS, Requirements for 501(c)(3) hospitals under the Affordable Care Act",
+     "source_url": "https://www.irs.gov/charities-non-profits/charitable-organizations/requirements-for-501c3-hospitals-under-the-affordable-care-act-section-501r"
+    },
+    {
+     "title": "Medical debt, collections, and credit reports",
+     "section": "Before a bill goes to collections",
+     "source_name": "Consumer Financial Protection Bureau, Medical debt",
+     "source_url": "https://www.consumerfinance.gov/"
+    }
+   ]
+  }
+ },
+ {
+  "method": "POST",
+  "path": "/api/cases/demo-case/letter",
+  "query": "",
+  "status": 200,
+  "request": {
+   "kind": "dispute",
+   "patient": {
+    "name": "Sam Example",
+    "address_lines": [],
+    "phone": null,
+    "email": null,
+    "account_number": null,
+    "member_id": null
+   },
+   "note": null,
+   "flag_ids": [
+    "balance_mismatch:bill.totals,eob.totals",
+    "billed_after_denial:bill.L2,eob.E2"
+   ]
+  },
+  "response": {
+   "kind": "dispute",
+   "subject": "Request for review of charges",
+   "text": "Sam Example\n\nOctober 31, 2026\n\nRiverside Medical Group\nAttn: Billing Department\n\nRe: Request for review of charges\nAccount number ending in 432\nStatement date: April 1, 2026\nDate of service: March 4, 2026\nInsurance claim number: C-2026-0001\n\nDear Billing Department,\n\nI have reviewed my bill dated April 1, 2026 and the Explanation of Benefits (EOB) from Example Health Plan. I would like you to review the following:\n\n1. Amount due does not match my insurer's EOB. This bill shows an amount due of $80.00. The EOB for claim C-2026-0001 shows my responsibility as $25.00, a difference of $55.00. Please reconcile the balance with the claim as processed by my insurer.\n\n2. Charge for a service my insurer denied: Complete blood count (85025) on March 4, 2026, $40.00. My EOB shows this service as denied (reason given: Not medically necessary (CO-50)). Please confirm whether I am responsible for this charge, and whether the claim can be corrected and resubmitted to my insurer.\n\nPlease review these items and send me a corrected bill, or a written explanation of why the charges are correct. If you have not already sent one, please also send an itemized bill. Please place the account on hold while this review is in progress.\n\nYou can confirm that the evidence quoted above matches the documents I received, and that this letter has not been changed, at: https://clyvexa.example/verify?id=ojy7FHxfMEF75VoB\n\nThank you for your help.\n\nSincerely,\nSam Example\n",
+   "verify_url": "https://clyvexa.example/verify?id=ojy7FHxfMEF75VoB"
+  }
+ },
+ {
+  "method": "POST",
+  "path": "/api/cases/demo-case/letter",
+  "query": "",
+  "status": 200,
+  "request": {
+   "kind": "itemized_request",
+   "patient": {
+    "name": "Sam Example",
+    "address_lines": [],
+    "phone": null,
+    "email": null,
+    "account_number": null,
+    "member_id": null
+   },
+   "note": null
+  },
+  "response": {
+   "kind": "itemized_request",
+   "subject": "Request for an itemized bill",
+   "text": "Sam Example\n\nOctober 31, 2026\n\nRiverside Medical Group\nAttn: Billing Department\n\nRe: Request for an itemized bill\nAccount number ending in 432\nStatement date: April 1, 2026\nDate of service: March 4, 2026\n\nDear Billing Department,\n\nI am writing to request an itemized bill for the account above. Please send a statement that lists each service separately, including:\n\n- the date of each service\n- the CPT, HCPCS, or revenue code for each service\n- a description of each service\n- the number of units\n- the charge for each service\n- all payments and adjustments applied, including insurance payments\n\nPlease also confirm whether this bill was submitted to my health insurance, and place the account on hold while this request is pending.\n\nThank you for your help.\n\nSincerely,\nSam Example\n",
+   "verify_url": null
+  }
+ },
+ {
+  "method": "POST",
+  "path": "/api/cases/demo-case/letter",
+  "query": "",
+  "status": 200,
+  "request": {
+   "kind": "financial_assistance",
+   "patient": {
+    "name": "Sam Example",
+    "address_lines": [],
+    "phone": null,
+    "email": null,
+    "account_number": null,
+    "member_id": null
+   },
+   "note": null
+  },
+  "response": {
+   "kind": "financial_assistance",
+   "subject": "Request for financial assistance",
+   "text": "Sam Example\n\nOctober 31, 2026\n\nRiverside Medical Group\nAttn: Billing Department\n\nRe: Request for financial assistance\nAccount number ending in 432\nStatement date: April 1, 2026\nDate of service: March 4, 2026\n\nDear Billing Department,\n\nI am writing to ask about financial assistance for the account above. Please send me:\n\n- your financial assistance or charity care policy\n- a plain-language summary of the policy\n- the application form, and a list of any documents I need to include\n\nPlease also tell me whether any discounts are available for patients paying on their own, and place the account on hold while my application is being considered.\n\nThank you for your help.\n\nSincerely,\nSam Example\n",
+   "verify_url": null
+  }
+ },
+ {
+  "method": "POST",
+  "path": "/api/cases/demo-case/letter",
+  "query": "",
+  "status": 200,
+  "request": {
+   "kind": "payment_plan",
+   "patient": {
+    "name": "Sam Example",
+    "address_lines": [],
+    "phone": null,
+    "email": null,
+    "account_number": null,
+    "member_id": null
+   },
+   "note": null,
+   "monthly_amount": "25"
+  },
+  "response": {
+   "kind": "payment_plan",
+   "subject": "Request for a payment plan",
+   "text": "Sam Example\n\nOctober 31, 2026\n\nRiverside Medical Group\nAttn: Billing Department\n\nRe: Request for a payment plan\nAccount number ending in 432\nStatement date: April 1, 2026\nDate of service: March 4, 2026\n\nDear Billing Department,\n\nI would like to pay the balance on the account above through a monthly payment plan. My statement shows an amount due of $80.00. I can pay $25.00 per month. Please let me know if this works.\n\nPlease confirm the plan terms in writing, including whether any interest or fees apply, and keep the account out of collections while I make payments as agreed.\n\nThank you for your help.\n\nSincerely,\nSam Example\n",
+   "verify_url": null
+  }
+ },
+ {
+  "method": "POST",
+  "path": "/api/cases/demo-case/letter",
+  "query": "",
+  "status": 200,
+  "request": {
+   "kind": "insurer_appeal",
+   "patient": {
+    "name": "Sam Example",
+    "address_lines": [],
+    "phone": null,
+    "email": null,
+    "account_number": null,
+    "member_id": null
+   },
+   "note": null
+  },
+  "response": {
+   "kind": "insurer_appeal",
+   "subject": "Request for review of a claim decision",
+   "text": "Sam Example\n\nOctober 31, 2026\n\nExample Health Plan\nAttn: Claims Review and Appeals\n\nRe: Request for review of a claim decision\nClaim number: C-2026-0001\nProvider: Riverside Medical Group\nDate of service: March 4, 2026\n\nDear Claims Review Team,\n\nI am asking you to review your decision on the following service(s) from Riverside Medical Group:\n\n- 85025 on March 4, 2026, billed at $40.00: denied (reason given: Not medically necessary (CO-50))\n\nPlease reconsider these decisions. If you need more information from me or from my provider, please tell me what is needed. Please also send me a copy of the plan rules or criteria used to make this decision, and tell me the deadline and next steps if I need to file a formal appeal.\n\nThank you for your help.\n\nSincerely,\nSam Example\n",
+   "verify_url": null
+  }
+ },
+ {
+  "method": "POST",
+  "path": "/api/cases/demo-case/rehearse",
+  "query": "",
+  "status": 200,
+  "request": {
+   "counterpart": "billing_office",
+   "turns": [],
+   "language": "en"
+  },
+  "response": {
+   "reply": "Thank you for calling the billing office of Riverside Medical Group. My name is Jordan. How can I help you today?",
+   "call_ended": false,
+   "fallback": false,
+   "suggested_opener": "Hi, I'm calling about my bill dated April 1, 2026. I have questions about why the amount due doesn't match my insurance statement and a service my insurer denied."
+  }
+ },
+ {
+  "method": "POST",
+  "path": "/api/cases/demo-case/rehearse",
+  "query": "",
+  "status": 200,
+  "request": {
+   "counterpart": "billing_office",
+   "turns": [
+    {
+     "role": "rep",
+     "text": "Thank you for calling the billing office of Riverside Medical Group. My name is Jordan. How can I help you today?"
+    },
+    {
+     "role": "patient",
+     "text": "Hi, I'm calling about my bill from March 4. My insurer denied the blood test, but the bill still charges me for it."
+    }
+   ],
+   "language": "en"
+  },
+  "response": {
+   "reply": "Our records show the charges on your account are correct as billed. However, I can submit that blood test charge for review if you would like.",
+   "call_ended": false,
+   "fallback": false
+  }
+ },
+ {
+  "method": "POST",
+  "path": "/api/cases/demo-case/rehearse/score",
+  "query": "",
+  "status": 200,
+  "request": {
+   "counterpart": "billing_office",
+   "turns": [
+    {
+     "role": "rep",
+     "text": "Thank you for calling the billing office of Riverside Medical Group. My name is Jordan. How can I help you today?"
+    },
+    {
+     "role": "patient",
+     "text": "Hi, I'm calling about my bill from March 4. My insurer denied the blood test, but the bill still charges me for it."
+    },
+    {
+     "role": "rep",
+     "text": "Our records show the charges on your account are correct as billed. However, I can submit that blood test charge for review if you would like."
+    }
+   ],
+   "language": "en"
+  },
+  "response": {
+   "scores": {
+    "clarity": 4,
+    "evidence": 3,
+    "asks": 3,
+    "persistence": 4
+   },
+   "strengths": [
+    "You clearly stated the date of service and the specific issue with the blood test right at the start.",
+    "You stayed calm and kept the conversation focused when the representative offered a review."
+   ],
+   "improvements": [
+    "You could refer specifically to the EOB amount and the denial reason to strengthen your request.",
+    "You should ask for an account hold and a reference number for the review."
+   ],
+   "try_saying": [
+    "My EOB shows the complete blood count on March 4 was denied as not medically necessary, so I want to confirm why I am billed for it.",
+    "Can you please put my account on hold while this is being reviewed?",
+    "Could I please have a reference number for this call and the review you just submitted?"
+   ],
+   "sources": [
+    {
+     "title": "Payment plans and talking about the amount you owe",
+     "section": "Before you pay",
+     "source_name": "Consumer Financial Protection Bureau",
+     "source_url": "https://www.consumerfinance.gov/"
+    },
+    {
+     "title": "Getting an itemized bill and your billing records",
+     "section": "How to ask",
+     "source_name": "HHS, Individuals' Right under HIPAA to Access their Health Information",
+     "source_url": "https://www.hhs.gov/hipaa/for-professionals/privacy/guidance/access/index.html"
+    },
+    {
+     "title": "Denied claims and how to appeal",
+     "section": "Fixing simple denials first",
+     "source_name": "HealthCare.gov, Appealing a health plan decision",
+     "source_url": "https://www.healthcare.gov/appeal-insurance-company-decision/"
+    },
+    {
+     "title": "Common medical billing errors to look for",
+     "section": "What to do if something looks wrong",
+     "source_name": "Consumer Financial Protection Bureau",
+     "source_url": "https://www.consumerfinance.gov/"
+    }
+   ],
+   "fallback": false,
+   "tips": []
+  }
+ },
+ {
+  "method": "PUT",
+  "path": "/api/cases/demo-case/language",
+  "query": "",
+  "status": 200,
+  "request": {
+   "language": "es"
+  },
+  "response": {
+   "case_id": "demo-case",
+   "status": "queued"
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/cases/demo-case",
+  "query": "",
+  "status": 200,
+  "request": null,
+  "response": {
+   "case_id": "demo-case",
+   "status": "extracting",
+   "error_code": null,
+   "expires_at": "2027-01-29T18:27:04.652647+00:00",
+   "language": "es"
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/cases/demo-case",
+  "query": "",
+  "status": 200,
+  "request": null,
+  "response": {
+   "case_id": "demo-case",
+   "status": "ready",
+   "error_code": null,
+   "expires_at": "2027-01-29T18:27:04.652647+00:00",
+   "language": "es",
+   "bill": {
+    "schema_version": "1.0",
+    "provider_name": "Riverside Medical Group",
+    "account_number_redacted": "****432",
+    "statement_date": "2026-04-01",
+    "dates_of_service": {
+     "start": "2026-03-04",
+     "end": "2026-03-04"
+    },
+    "line_items": [
+     {
+      "line_id": "L1",
+      "service_date": "2026-03-04",
+      "description": "Office visit, established patient",
+      "code": "99213",
+      "code_type": "CPT",
+      "units": "1",
+      "charge": "150.00",
+      "source_page": 1,
+      "source_text": "03/04/2026 99213 Office visit, established patient 1 $150.00"
+     },
+     {
+      "line_id": "L2",
+      "service_date": "2026-03-04",
+      "description": "Complete blood count",
+      "code": "85025",
+      "code_type": "CPT",
+      "units": "1",
+      "charge": "40.00",
+      "source_page": 1,
+      "source_text": "03/04/2026 85025 Complete blood count 1 $40.00"
+     },
+     {
+      "line_id": "L3",
+      "service_date": "2026-03-04",
+      "description": "Venipuncture",
+      "code": "36415",
+      "code_type": "CPT",
+      "units": "1",
+      "charge": "15.00",
+      "source_page": 1,
+      "source_text": "03/04/2026 36415 Venipuncture 1 $15.00"
+     }
+    ],
+    "totals": {
+     "billed": "205.00",
+     "adjustments": "-125.00",
+     "patient_balance": "80.00",
+     "source": {
+      "page": 1,
+      "text": "Amount due $80.00"
+     }
+    },
+    "itemized": true,
+    "out_of_network_marker": null,
+    "extraction_confidence": "high"
+   },
+   "eob": {
+    "schema_version": "1.0",
+    "insurer": "Example Health Plan",
+    "claim_id": "C-2026-0001",
+    "service_lines": [
+     {
+      "line_id": "E1",
+      "service_date": "2026-03-04",
+      "code": "99213",
+      "billed": "150.00",
+      "allowed": "100.00",
+      "insurer_paid": "80.00",
+      "patient_responsibility": "20.00",
+      "status": "processed",
+      "denial_reason": null,
+      "network_status": "in_network",
+      "source_page": 1,
+      "source_text": "03/04/2026 99213 $150.00 $100.00 $80.00 $20.00 Processed"
+     },
+     {
+      "line_id": "E2",
+      "service_date": "2026-03-04",
+      "code": "85025",
+      "billed": "40.00",
+      "allowed": "0.00",
+      "insurer_paid": "0.00",
+      "patient_responsibility": "0.00",
+      "status": "denied",
+      "denial_reason": "Not medically necessary (CO-50)",
+      "network_status": "in_network",
+      "source_page": 1,
+      "source_text": "03/04/2026 85025 $40.00 $0.00 $0.00 $0.00 Denied: Not medically necessary (CO-50)"
+     },
+     {
+      "line_id": "E3",
+      "service_date": "2026-03-04",
+      "code": "36415",
+      "billed": "15.00",
+      "allowed": "10.00",
+      "insurer_paid": "5.00",
+      "patient_responsibility": "5.00",
+      "status": "processed",
+      "denial_reason": null,
+      "network_status": "in_network",
+      "source_page": 1,
+      "source_text": "03/04/2026 36415 $15.00 $10.00 $5.00 $5.00 Processed"
+     }
+    ],
+    "totals": {
+     "patient_responsibility": "25.00",
+     "source": {
+      "page": 1,
+      "text": "Total you may owe the provider $25.00"
+     }
+    }
+   },
+   "eob_status": "ok",
+   "flags": [
+    {
+     "flag_id": "balance_mismatch:bill.totals,eob.totals",
+     "rule": "balance_mismatch",
+     "severity": "check",
+     "confidence": "high",
+     "summary": "The bill asks you to pay $80.00, but your insurer's EOB says your responsibility is $25.00 (a difference of $55.00). This needs checking.",
+     "evidence": [
+      {
+       "source": "bill",
+       "ref": "totals",
+       "page": 1,
+       "text": "Amount due $80.00"
+      },
+      {
+       "source": "eob",
+       "ref": "totals",
+       "page": 1,
+       "text": "Total you may owe the provider $25.00"
+      }
+     ]
+    },
+    {
+     "flag_id": "billed_after_denial:bill.L2,eob.E2",
+     "rule": "billed_after_denial",
+     "severity": "review",
+     "confidence": "medium",
+     "summary": "Line L2 (85025, 2026-03-04) is on your bill, but your EOB shows the insurer denied this service. Reason given: Not medically necessary (CO-50). Check whether you should be billed for it.",
+     "evidence": [
+      {
+       "source": "bill",
+       "ref": "L2",
+       "page": 1,
+       "text": "03/04/2026 85025 Complete blood count 1 $40.00"
+      },
+      {
+       "source": "eob",
+       "ref": "E2",
+       "page": 1,
+       "text": "03/04/2026 85025 $40.00 $0.00 $0.00 $0.00 Denied: Not medically necessary (CO-50)"
+      }
+     ]
+    }
+   ],
+   "explanations": {
+    "lines": {
+     "L1": {
+      "text": "Esta es una cita de control de rutina con su médico habitual para revisar su salud general.",
+      "source": "llm"
+     },
+     "L2": {
+      "text": "Esta prueba revisa las diferentes células de su sangre para ver si todo está en orden.",
+      "source": "llm"
+     },
+     "L3": {
+      "text": "Este es el cargo por sacar un poco de sangre de su brazo para los exámenes.",
+      "source": "llm"
+     }
+    },
+    "flags": {
+     "balance_mismatch:bill.totals,eob.totals": {
+      "text": "La cantidad que le pide pagar el hospital no coincide con lo que dice el documento de su seguro. Vale la pena revisar este detalle para asegurarse de que todo esté correcto.",
+      "source": "llm"
+     },
+     "billed_after_denial:bill.L2,eob.E2": {
+      "text": "Su seguro indicó que no cubrirá uno de los análisis de sangre que le hicieron. Es una buena idea verificar por qué aparece este cargo en su cuenta.",
+      "source": "llm"
+     }
+    }
+   },
+   "problems": [],
+   "warnings": [],
+   "user_edited": false,
+   "price_context": {},
+   "prices_label": null,
+   "radar": [],
+   "error_message": null
+  }
+ },
+ {
+  "method": "PUT",
+  "path": "/api/cases/demo-case/language",
+  "query": "",
+  "status": 200,
+  "request": {
+   "language": "en"
+  },
+  "response": {
+   "case_id": "demo-case",
+   "status": "queued"
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/cases/demo-case",
+  "query": "",
+  "status": 200,
+  "request": null,
+  "response": {
+   "case_id": "demo-case",
+   "status": "extracting",
+   "error_code": null,
+   "expires_at": "2027-01-29T18:27:04.652647+00:00",
+   "language": "en"
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/cases/demo-case",
+  "query": "",
+  "status": 200,
+  "request": null,
+  "response": {
+   "case_id": "demo-case",
+   "status": "ready",
+   "error_code": null,
+   "expires_at": "2027-01-29T18:27:04.652647+00:00",
+   "language": "en",
+   "bill": {
+    "schema_version": "1.0",
+    "provider_name": "Riverside Medical Group",
+    "account_number_redacted": "****432",
+    "statement_date": "2026-04-01",
+    "dates_of_service": {
+     "start": "2026-03-04",
+     "end": "2026-03-04"
+    },
+    "line_items": [
+     {
+      "line_id": "L1",
+      "service_date": "2026-03-04",
+      "description": "Office visit, established patient",
+      "code": "99213",
+      "code_type": "CPT",
+      "units": "1",
+      "charge": "150.00",
+      "source_page": 1,
+      "source_text": "03/04/2026 99213 Office visit, established patient 1 $150.00"
+     },
+     {
+      "line_id": "L2",
+      "service_date": "2026-03-04",
+      "description": "Complete blood count",
+      "code": "85025",
+      "code_type": "CPT",
+      "units": "1",
+      "charge": "40.00",
+      "source_page": 1,
+      "source_text": "03/04/2026 85025 Complete blood count 1 $40.00"
+     },
+     {
+      "line_id": "L3",
+      "service_date": "2026-03-04",
+      "description": "Venipuncture",
+      "code": "36415",
+      "code_type": "CPT",
+      "units": "1",
+      "charge": "15.00",
+      "source_page": 1,
+      "source_text": "03/04/2026 36415 Venipuncture 1 $15.00"
+     }
+    ],
+    "totals": {
+     "billed": "205.00",
+     "adjustments": "-125.00",
+     "patient_balance": "80.00",
+     "source": {
+      "page": 1,
+      "text": "Amount due $80.00"
+     }
+    },
+    "itemized": true,
+    "out_of_network_marker": null,
+    "extraction_confidence": "high"
+   },
+   "eob": {
+    "schema_version": "1.0",
+    "insurer": "Example Health Plan",
+    "claim_id": "C-2026-0001",
+    "service_lines": [
+     {
+      "line_id": "E1",
+      "service_date": "2026-03-04",
+      "code": "99213",
+      "billed": "150.00",
+      "allowed": "100.00",
+      "insurer_paid": "80.00",
+      "patient_responsibility": "20.00",
+      "status": "processed",
+      "denial_reason": null,
+      "network_status": "in_network",
+      "source_page": 1,
+      "source_text": "03/04/2026 99213 $150.00 $100.00 $80.00 $20.00 Processed"
+     },
+     {
+      "line_id": "E2",
+      "service_date": "2026-03-04",
+      "code": "85025",
+      "billed": "40.00",
+      "allowed": "0.00",
+      "insurer_paid": "0.00",
+      "patient_responsibility": "0.00",
+      "status": "denied",
+      "denial_reason": "Not medically necessary (CO-50)",
+      "network_status": "in_network",
+      "source_page": 1,
+      "source_text": "03/04/2026 85025 $40.00 $0.00 $0.00 $0.00 Denied: Not medically necessary (CO-50)"
+     },
+     {
+      "line_id": "E3",
+      "service_date": "2026-03-04",
+      "code": "36415",
+      "billed": "15.00",
+      "allowed": "10.00",
+      "insurer_paid": "5.00",
+      "patient_responsibility": "5.00",
+      "status": "processed",
+      "denial_reason": null,
+      "network_status": "in_network",
+      "source_page": 1,
+      "source_text": "03/04/2026 36415 $15.00 $10.00 $5.00 $5.00 Processed"
+     }
+    ],
+    "totals": {
+     "patient_responsibility": "25.00",
+     "source": {
+      "page": 1,
+      "text": "Total you may owe the provider $25.00"
+     }
+    }
+   },
+   "eob_status": "ok",
+   "flags": [
+    {
+     "flag_id": "balance_mismatch:bill.totals,eob.totals",
+     "rule": "balance_mismatch",
+     "severity": "check",
+     "confidence": "high",
+     "summary": "The bill asks you to pay $80.00, but your insurer's EOB says your responsibility is $25.00 (a difference of $55.00). This needs checking.",
+     "evidence": [
+      {
+       "source": "bill",
+       "ref": "totals",
+       "page": 1,
+       "text": "Amount due $80.00"
+      },
+      {
+       "source": "eob",
+       "ref": "totals",
+       "page": 1,
+       "text": "Total you may owe the provider $25.00"
+      }
+     ]
+    },
+    {
+     "flag_id": "billed_after_denial:bill.L2,eob.E2",
+     "rule": "billed_after_denial",
+     "severity": "review",
+     "confidence": "medium",
+     "summary": "Line L2 (85025, 2026-03-04) is on your bill, but your EOB shows the insurer denied this service. Reason given: Not medically necessary (CO-50). Check whether you should be billed for it.",
+     "evidence": [
+      {
+       "source": "bill",
+       "ref": "L2",
+       "page": 1,
+       "text": "03/04/2026 85025 Complete blood count 1 $40.00"
+      },
+      {
+       "source": "eob",
+       "ref": "E2",
+       "page": 1,
+       "text": "03/04/2026 85025 $40.00 $0.00 $0.00 $0.00 Denied: Not medically necessary (CO-50)"
+      }
+     ]
+    }
+   ],
+   "explanations": {
+    "lines": {
+     "L1": {
+      "text": "This is a routine check-in with your regular doctor to talk about your health. It covers your time spent talking with the medical team.",
+      "source": "llm"
+     },
+     "L2": {
+      "text": "This is a standard blood test to check different parts of your blood, like your red and white blood cells. It helps your doctor see how your overall health is doing.",
+      "source": "llm"
+     },
+     "L3": {
+      "text": "This is the small fee for the quick stick used to draw your blood sample. It covers the supplies and the person who safely took the blood.",
+      "source": "llm"
+     }
+    },
+    "flags": {
+     "balance_mismatch:bill.totals,eob.totals": {
+      "text": "The amount the provider is asking you to pay does not match what your insurance paper says you owe. It is a good idea to compare these papers to make sure everyone agrees on the final amount.",
+      "source": "llm"
+     },
+     "billed_after_denial:bill.L2,eob.E2": {
+      "text": "Your insurance company decided not to pay for one of the blood tests on your list. Since it was denied, you may want to look closer to see why it was not covered before taking any next steps.",
+      "source": "llm"
+     }
+    }
+   },
+   "problems": [],
+   "warnings": [],
+   "user_edited": false,
+   "price_context": {},
+   "prices_label": null,
+   "radar": [],
+   "error_message": null
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/refunds",
+  "query": "",
+  "status": 200,
+  "request": null,
+  "response": {
+   "episodes": [
+    {
+     "episode_id": "b767d400cab0b9bb",
+     "provider_name": "Riverside Medical Group",
+     "service_dates": [
+      "2026-03-04"
+     ],
+     "statements": [
+      {
+       "case_id": "demo-case",
+       "statement_date": "2026-04-01",
+       "amount_due": "80.00",
+       "has_eob": true
+      }
+     ],
+     "payments": [],
+     "owed": "25.00",
+     "paid": "0",
+     "latest_balance": "80.00",
+     "findings": [],
+     "estimate": "0"
+    }
+   ],
+   "total_estimate": "0",
+   "unassigned_payments": []
+  }
+ }
+]

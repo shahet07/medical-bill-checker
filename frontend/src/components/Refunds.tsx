@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useApp } from "@/lib/app";
-import { apiBlob, saveBlob } from "@/lib/api";
+import { ApiError, apiBlob, saveBlob } from "@/lib/api";
+import { demoOnly } from "@/lib/demo";
 import { money, parseAmount, shortDate } from "@/lib/format";
 
 interface Payment {
@@ -113,8 +114,8 @@ function EpisodeCard({ ep, onChange }: { ep: Episode; onChange: () => void }) {
   const pdf = async () => {
     try {
       saveBlob(await apiBlob("/api/refunds/letter", { ...body(), format: "pdf" }), "refund-request.pdf");
-    } catch {
-      setError(t("err_pdf"));
+    } catch (e) {
+      setError(e instanceof ApiError && e.code === "demo" ? demoOnly(lang) : t("err_pdf"));
     }
   };
 

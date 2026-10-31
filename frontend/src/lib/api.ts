@@ -1,3 +1,5 @@
+import { STATIC_ONLY } from "./base";
+import { DemoError, demoApi } from "./demo";
 import { Lang, SERVER_ERRORS_ES } from "./i18n";
 
 export class ApiError extends Error {
@@ -18,6 +20,15 @@ export async function api<T>(
   msg: Messages,
   onLoginRequired?: () => void,
 ): Promise<T> {
+  if (STATIC_ONLY) {
+    // Website-only build: replay the recorded sample session instead (see demo.ts).
+    try {
+      return (await demoApi(method, path, body, lang)) as T;
+    } catch (e) {
+      if (e instanceof DemoError) throw new ApiError(e.message, e.status, "demo");
+      throw e;
+    }
+  }
   const init: RequestInit = { method, credentials: "same-origin", headers: {} };
   if (body instanceof FormData) init.body = body;
   else if (body !== undefined) {
@@ -53,6 +64,7 @@ export async function api<T>(
 
 // For binary responses (letter PDFs).
 export async function apiBlob(path: string, body: unknown): Promise<Blob> {
+  if (STATIC_ONLY) throw new ApiError("pdf", 400, "demo"); // no PDF service in the demo
   const resp = await fetch(path, {
     method: "POST",
     credentials: "same-origin",

@@ -1,8 +1,10 @@
 "use client";
 
 import { useApp } from "@/lib/app";
+import { STATIC_ONLY, at } from "@/lib/base";
 import type { User } from "@/lib/types";
-import { at } from "@/lib/base";
+
+const DEMO_BADGE = { en: "Demo · sample bill", es: "Demostración · factura de muestra" };
 
 export default function Header(props: {
   user: User | null;
@@ -14,16 +16,21 @@ export default function Header(props: {
 }) {
   const { lang, t, ts } = useApp();
   return (
-    <header className="site-header">
-      <div className="wrap">
+    <header className="site-header app-top">
+      <div className="app-top-glow" aria-hidden="true" />
+      <div className="wrap wide">
         <div className="header-row">
           <h1>
             <a href={at("/")} className="brand home-link">
               <img src={at("/icon.svg")} alt="" width={40} height={40} className="brand-mark" />
-              <span>{ts("app_title")}</span>
+              <span className="app-brand-name">
+                {ts("app_title")}
+                <small>{lang === "es" ? "Revisión de facturas médicas" : "Medical bill checker"}</small>
+              </span>
             </a>
           </h1>
           <div className="header-actions">
+            {STATIC_ONLY && <span className="demo-badge">{DEMO_BADGE[lang]}</span>}
             <span id="user-menu" hidden={!props.showUserMenu}>
               <span id="user-email" className="muted">
                 {props.user?.email}
