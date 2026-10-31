@@ -325,20 +325,12 @@ a.brand { color: var(--text); text-decoration: none; font-weight: 700; font-size
 .site-hero { padding: 64px 0 56px; }
 .hero-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 48px; align-items: center; }
 @media (max-width: 860px) { .hero-grid { grid-template-columns: 1fr; gap: 32px; } .site-hero { padding: 36px 0 40px; } }
-.eyebrow { color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.85rem; margin: 0 0 12px; }
 .site-hero h1 { font-size: clamp(2rem, 4.5vw, 3rem); line-height: 1.12; margin: 0 0 18px; letter-spacing: -0.01em; }
 .lead { font-size: 1.15rem; color: var(--muted); margin: 0 0 28px; max-width: 36em; }
 .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; }
 .hero-points { list-style: none; padding: 0; margin: 24px 0 0; display: flex; flex-wrap: wrap; gap: 8px 20px; color: var(--muted); font-size: 0.95rem; }
 .hero-points li::before, .checklist li::before { content: "✓"; color: var(--ok); font-weight: 700; margin-right: 8px; }
 
-.mock { margin: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 22px; box-shadow: 0 12px 40px rgb(0 0 0 / 0.08); }
-.mock-label { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
-.mock h2 { margin: 6px 0 4px; font-size: 1.25rem; }
-.mock-flag { border-left: 4px solid var(--warn); background: var(--bg); border-radius: 8px; padding: 10px 12px; margin-top: 12px; display: flex; flex-direction: column; gap: 2px; }
-.mock-flag span { color: var(--muted); font-size: 0.92rem; }
-.mock-owed { color: var(--ok); font-weight: 700; margin: 16px 0 12px; }
-.small-fake { font-size: 0.9rem; padding: 7px 14px; cursor: default; }
 
 .site-section { padding: 64px 0; }
 .site-section.alt { background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }

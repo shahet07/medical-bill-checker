@@ -33,8 +33,15 @@ export function useSiteLang(): [Lang, (l: Lang) => void] {
 export function SiteHeader(props: { text: SiteText; lang?: Lang; onToggleLang?: () => void; sections?: boolean }) {
   const { text, sections } = props;
   const anchor = (id: string) => (sections ? "#" + id : "/#" + id);
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
   return (
-    <header className="site-nav">
+    <header className={"site-nav" + (scrolled ? " scrolled" : "")}>
       <div className="site-wrap site-nav-row">
         <a href="/" className="brand site-brand" aria-label="Clyvexa home">
           <img src="/icon.svg" alt="" width={36} height={36} className="brand-mark" />

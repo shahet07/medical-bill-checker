@@ -3,8 +3,18 @@ import type { Lang } from "./i18n";
 
 export interface SiteText {
   nav: { how: string; features: string; privacy: string; faq: string; open: string };
-  hero: { eyebrow: string; title: string; lead: string; cta: string; secondary: string; points: string[] };
-  mock: { label: string; title: string; flags: { title: string; detail: string }[]; owed: string; letter: string };
+  hero: { eyebrow: string; titleParts: [string, string, string]; lead: string; cta: string; secondary: string; points: string[] };
+  mock: {
+    label: string;
+    status: { checking: string; checked: string };
+    bill: { provider: string; statement: string; lines: { desc: string; amt: string }[]; dueLabel: string; due: string; eob: string };
+    badges: [string, string];
+    title: string;
+    flags: { title: string; detail: string }[];
+    owed: [string, string];
+    letter: string;
+  };
+  stats: { value: number; suffix: string; label: string }[];
   how: { title: string; steps: { title: string; body: string }[] };
   checks: { title: string; lead: string; items: { title: string; body: string }[] };
   features: { title: string; items: { title: string; body: string }[] };
@@ -19,7 +29,7 @@ const en: SiteText = {
   nav: { how: "How it works", features: "Features", privacy: "Privacy", faq: "FAQ", open: "Check my bill" },
   hero: {
     eyebrow: "Medical bill checker",
-    title: "Find the mistakes in your medical bill before you pay it.",
+    titleParts: ["Find the ", "mistakes", " in your medical bill before you pay it."],
     lead:
       "Upload your bill and your insurer's Explanation of Benefits. Clyvexa reads both, compares them line by line, explains what it finds in plain language, and writes the letter to send.",
     cta: "Check my bill",
@@ -27,15 +37,36 @@ const en: SiteText = {
     points: ["PDF or phone photos", "English and Spanish", "Open source"],
   },
   mock: {
-    label: "Example result",
+    label: "Example: a sample bill being checked",
+    status: { checking: "Checking…", checked: "Checked" },
+    bill: {
+      provider: "Example Medical Center",
+      statement: "Patient statement",
+      lines: [
+        { desc: "Office visit (99214)", amt: "$210.00" },
+        { desc: "Office visit (99214)", amt: "$210.00" },
+        { desc: "Metabolic panel (80053)", amt: "$86.00" },
+        { desc: "Insurance paid", amt: "−$94.00" },
+      ],
+      dueLabel: "Amount due",
+      due: "$412.00",
+      eob: "Your insurer's EOB says you owe $96.40",
+    },
+    badges: ["Charged twice", "Doesn't match EOB"],
     title: "2 things to check",
     flags: [
       { title: "Charged twice", detail: "Office visit 99214 appears on the same day twice." },
       { title: "More than your insurer says you owe", detail: "Bill asks $412.00. EOB says $96.40." },
     ],
-    owed: "You may owe $315.60 less",
+    owed: ["You may owe ", " less"],
     letter: "Get the letter",
   },
+  stats: [
+    { value: 8, suffix: "", label: "checks on every bill" },
+    { value: 2, suffix: "", label: "languages, English and Spanish" },
+    { value: 24, suffix: "h", label: "until your uploaded files are deleted" },
+    { value: 0, suffix: "", label: "ads or tracking cookies" },
+  ],
   how: {
     title: "How it works",
     steps: [
@@ -136,7 +167,7 @@ const es: SiteText = {
   nav: { how: "Cómo funciona", features: "Funciones", privacy: "Privacidad", faq: "Preguntas", open: "Revisar mi factura" },
   hero: {
     eyebrow: "Revisión de facturas médicas",
-    title: "Encuentre los errores de su factura médica antes de pagarla.",
+    titleParts: ["Encuentre los ", "errores", " de su factura médica antes de pagarla."],
     lead:
       "Suba su factura y la Explicación de Beneficios (EOB) de su seguro. Clyvexa lee ambas, las compara línea por línea, explica lo que encuentra en palabras sencillas y escribe la carta para enviar.",
     cta: "Revisar mi factura",
@@ -144,15 +175,36 @@ const es: SiteText = {
     points: ["PDF o fotos del teléfono", "Inglés y español", "Código abierto"],
   },
   mock: {
-    label: "Ejemplo de resultado",
+    label: "Ejemplo: revisión de una factura de muestra",
+    status: { checking: "Revisando…", checked: "Revisada" },
+    bill: {
+      provider: "Centro Médico de Ejemplo",
+      statement: "Estado de cuenta",
+      lines: [
+        { desc: "Consulta (99214)", amt: "$210.00" },
+        { desc: "Consulta (99214)", amt: "$210.00" },
+        { desc: "Panel metabólico (80053)", amt: "$86.00" },
+        { desc: "Pago del seguro", amt: "−$94.00" },
+      ],
+      dueLabel: "Monto a pagar",
+      due: "$412.00",
+      eob: "La EOB de su seguro dice que debe $96.40",
+    },
+    badges: ["Cobrado dos veces", "No coincide con la EOB"],
     title: "2 cosas para revisar",
     flags: [
       { title: "Cobrado dos veces", detail: "La consulta 99214 aparece dos veces el mismo día." },
       { title: "Más de lo que su seguro dice que debe", detail: "La factura pide $412.00. La EOB dice $96.40." },
     ],
-    owed: "Podría deber $315.60 menos",
+    owed: ["Podría deber ", " menos"],
     letter: "Obtener la carta",
   },
+  stats: [
+    { value: 8, suffix: "", label: "revisiones en cada factura" },
+    { value: 2, suffix: "", label: "idiomas, inglés y español" },
+    { value: 24, suffix: " h", label: "hasta que se borran sus archivos" },
+    { value: 0, suffix: "", label: "anuncios o cookies de rastreo" },
+  ],
   how: {
     title: "Cómo funciona",
     steps: [
