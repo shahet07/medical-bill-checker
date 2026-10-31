@@ -5,6 +5,7 @@ export type Status = "queued" | "extracting" | "needs_confirmation" | "ready" | 
 export interface User {
   email: string;
   research_consent: boolean;
+  radar_consent: boolean;
   created_at: string;
 }
 
@@ -83,7 +84,16 @@ export interface CaseData {
   warnings?: string[];
   user_edited?: boolean;
   price_context?: Record<string, { reference_price: string }>;
+  radar?: RadarPattern[];
   prices_label?: string | null;
+}
+
+export interface RadarPattern {
+  rule: string;
+  code: string | null;
+  reports: string;
+  confirmed: "most" | "some" | null;
+  last_month: string;
 }
 
 export interface CaseSummary {

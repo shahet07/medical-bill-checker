@@ -14,6 +14,7 @@ export function AuthView(props: {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [consent, setConsent] = useState(false);
+  const [radar, setRadar] = useState(false);
 
   const submit = async (e: React.FormEvent, register: boolean) => {
     e.preventDefault();
@@ -21,7 +22,7 @@ export function AuthView(props: {
     if (!email.trim() || !password) return setError(t("err_login_fields"));
     try {
       const user = register
-        ? await call<User>("POST", "/api/auth/register", { email: email.trim(), password, research_consent: consent })
+        ? await call<User>("POST", "/api/auth/register", { email: email.trim(), password, research_consent: consent, radar_consent: radar })
         : await call<User>("POST", "/api/auth/login", { email: email.trim(), password });
       setPassword("");
       props.onLoggedIn(user);
@@ -70,6 +71,10 @@ export function AuthView(props: {
           <input id="reg-consent" type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} /> <span>{ts("consent_label")}</span>
         </label>
         <p className="hint">{ts("consent_detail")}</p>
+        <label className="consent">
+          <input id="reg-radar" type="checkbox" checked={radar} onChange={(e) => setRadar(e.target.checked)} /> <span>{t("radar_consent_label")}</span>
+        </label>
+        <p className="hint">{t("radar_consent_detail")}</p>
         <button type="submit" className="primary">{ts("register_button")}</button>
         <p className="switch">
           <span>{ts("have_account")}</span>{" "}
@@ -96,7 +101,20 @@ export function AccountView(props: {
   const [next, setNext] = useState("");
   const [passwordSaved, setPasswordSaved] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
+  const [radar, setRadar] = useState<boolean | null>(null);
+  const [radarSaved, setRadarSaved] = useState(false);
   const checked = consent ?? !!props.user?.research_consent;
+  const radarChecked = radar ?? !!props.user?.radar_consent;
+
+  const saveRadar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      props.onUserChange(await call<User>("PUT", "/api/auth/radar-consent", { radar_consent: radarChecked }));
+      setRadarSaved(true);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
 
   const saveConsent = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -150,6 +168,15 @@ export function AccountView(props: {
         <p className="hint">{ts("consent_detail")}</p>
         <button type="submit" className="small">{ts("save")}</button>
         <span id="consent-saved" className="thanks" hidden={!consentSaved}> {ts("saved")}</span>
+      </form>
+      <form id="radar-form" className="account-block" noValidate onSubmit={saveRadar}>
+        <label className="consent">
+          <input id="account-radar" type="checkbox" checked={radarChecked} onChange={(e) => { setRadar(e.target.checked); setRadarSaved(false); }} />{" "}
+          <span>{t("radar_consent_label")}</span>
+        </label>
+        <p className="hint">{t("radar_consent_detail")}</p>
+        <button type="submit" className="small">{ts("save")}</button>
+        <span id="radar-saved" className="thanks" hidden={!radarSaved}> {ts("saved")}</span>
       </form>
       <form id="password-form" className="account-block" noValidate onSubmit={changePassword}>
         <h3>{ts("change_password")}</h3>

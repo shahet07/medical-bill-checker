@@ -49,6 +49,7 @@ from .llm import JsonLLM, make_llm
 from .models import Bill, Eob, Flag, Money
 from .pipeline import CaseRunner
 from .rag import MAX_QUESTION_CHARS, GeminiEmbedder, KnowledgeBase, answer_question
+from .radar import DEFAULT_K, normalize_provider, present
 from .packet import build_payload, new_packet_id, public_key_b64, sha256_hex, sign, signing_key
 from .packet import verify as verify_packet
 from .rehearsal import MAX_TURNS, Turn, opening, rep_reply, score_call, suggested_opener
@@ -106,6 +107,7 @@ class Settings:
     llm: JsonLLM
     reference: Reference = field(default_factory=Reference)
     knowledge: Optional[KnowledgeBase] = None  # default: keyword search over the bundled guides
+    radar_k: int = DEFAULT_K  # distinct reporters needed before a radar pattern is shown
     # Built Next.js frontend to serve at "/". None or missing: serve the original page in web/.
     frontend_dir: Optional[Path] = None
     secure_cookies: bool = True
@@ -127,6 +129,7 @@ class Register(_Body):
     email: str = Field(max_length=254)
     password: str = Field(max_length=auth.MAX_PASSWORD)
     research_consent: bool = False
+    radar_consent: bool = False
 
 
 class Login(_Body):
@@ -141,6 +144,10 @@ class ChangePassword(_Body):
 
 class Consent(_Body):
     research_consent: bool
+
+
+class RadarConsent(_Body):
+    radar_consent: bool
 
 
 class DeleteAccount(_Body):
@@ -392,7 +399,12 @@ def create_app(settings: Settings) -> FastAPI:
         return _error(status, exc.code, exc.message)
 
     def me(user: UserRow) -> dict:
-        return {"email": user.email, "research_consent": user.research_consent, "created_at": user.created_at.isoformat()}
+        return {
+            "email": user.email,
+            "research_consent": user.research_consent,
+            "radar_consent": user.radar_consent,
+            "created_at": user.created_at.isoformat(),
+        }
 
     def own_case(case_id: str, user_id: str):
         case = store.get_case(user_id, case_id)
@@ -409,6 +421,9 @@ def create_app(settings: Settings) -> FastAPI:
             user = auth.register(store, body.email, body.password, body.research_consent)
         except AuthError as exc:
             raise auth_error(exc)
+        if body.radar_consent:
+            store.set_radar_consent(user.user_id, True)
+            user = store.get_user(user.user_id)
         start_session(response, user)
         store.record_event("signup", user.user_id, research_consent=user.research_consent)
         return me(user)
@@ -466,6 +481,12 @@ def create_app(settings: Settings) -> FastAPI:
             for case in store.list_cases(user.user_id):
                 store.delete_research(case.case_id)
         store.record_event("consent_changed", user.user_id, research_consent=body.research_consent)
+        return me(store.get_user(user.user_id))
+
+    @app.put("/api/auth/radar-consent")
+    def set_radar_consent(body: RadarConsent, user: UserRow = Depends(current_user)):
+        store.set_radar_consent(user.user_id, body.radar_consent)  # withdrawing deletes this user's reports
+        store.record_event("radar_consent_changed", user.user_id, radar_consent=body.radar_consent)
         return me(store.get_user(user.user_id))
 
     @app.delete("/api/auth/account", status_code=204)
@@ -561,6 +582,8 @@ def create_app(settings: Settings) -> FastAPI:
             out["user_edited"] = bool(result.get("user_edited"))
             out["price_context"] = result.get("price_context") or {}
             out["prices_label"] = result.get("prices_label")
+            provider_key = normalize_provider((result.get("bill") or {}).get("provider_name"))
+            out["radar"] = present(store.radar_patterns(provider_key, settings.radar_k), settings.radar_k) if provider_key else []
             out["error_message"] = result.get("error_message")
         return out
 
@@ -681,6 +704,7 @@ def create_app(settings: Settings) -> FastAPI:
             raise _error(404, "not_found", "That item is not part of this case.")
         model = getattr(settings.llm, "model", None)
         store.record_flag_feedback(case.case_id, flag["flag_id"], flag["rule"], flag["confidence"], body.verdict, model)
+        store.set_radar_verdict(case.case_id, flag["flag_id"], body.verdict)
         store.record_event("flag_feedback", user.user_id, verdict=body.verdict)
         return Response(status_code=204)
 
@@ -771,6 +795,26 @@ def create_app(settings: Settings) -> FastAPI:
             "tips": out.tips,
         }
 
+    # --- Billing error radar ---------------------------------------------------------------
+
+    @app.get("/api/radar")
+    def radar_search(q: str = "", user: UserRow = Depends(current_user)):
+        """Providers with patterns reported by at least K different people."""
+        key = normalize_provider(q) if q.strip() else ""
+        if q.strip() and key is None:
+            return {"providers": [], "k": settings.radar_k}
+        rows = store.radar_providers(key or "", settings.radar_k)
+        return {
+            "k": settings.radar_k,
+            "providers": [
+                {
+                    "provider_name": r["provider_name"],
+                    "patterns": present(store.radar_patterns(r["provider_key"], settings.radar_k), settings.radar_k),
+                }
+                for r in rows
+            ],
+        }
+
     # --- Public verification of dispute packets (no login) ----------------------------------
 
     @app.get("/api/verify/key")
@@ -827,6 +871,8 @@ def app_from_env() -> FastAPI:
             llm=make_llm(),
             reference=reference,
             frontend_dir=Path(os.environ.get("BILLCHECKER_FRONTEND_DIR", DEFAULT_FRONTEND_DIR)),
+            # Distinct reporters before a radar pattern shows. Keep at 10+ in production (privacy).
+            radar_k=int(os.environ.get("BILLCHECKER_RADAR_K", DEFAULT_K)),
             knowledge=KnowledgeBase.from_env(embedder=GeminiEmbedder() if os.environ.get("GEMINI_API_KEY") else None),
             secure_cookies=os.environ.get("BILLCHECKER_INSECURE_COOKIES") != "1",
         )

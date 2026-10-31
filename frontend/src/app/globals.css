@@ -254,3 +254,14 @@ td.date { white-space: nowrap; color: var(--muted); }
 .fingerprints ul { padding-left: 18px; font-size: 0.85rem; }
 #verify-letter { margin-top: 6px; }
 .small-print { font-size: 0.85rem; padding-bottom: 32px; }
+
+/* Billing error radar */
+.card.radar { border-left: 5px solid var(--accent); }
+.radar-list { list-style: none; margin: 10px 0 0; padding: 0; }
+.radar-list li { padding: 8px 0; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: baseline; }
+.radar-meta { flex-basis: 100%; color: var(--muted); font-size: 0.88rem; }
+.radar-search { border-top: 1px solid var(--border); margin-top: 20px; padding-top: 16px; }
+.radar-provider h3 { margin: 14px 0 0; font-size: 1rem; }
+.inline-form { display: flex; gap: 8px; }
+.inline-form input { flex: 1; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

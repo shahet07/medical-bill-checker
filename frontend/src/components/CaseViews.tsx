@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useApp } from "@/lib/app";
 import { money, parseAmount, shortDate } from "@/lib/format";
 import type { CaseData, CaseSummary } from "@/lib/types";
+import { RadarSearch } from "./Radar";
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 const MAX_FILES = 10;
@@ -107,6 +108,7 @@ export function UploadView(props: {
       </form>
       <p className="privacy">{ts("privacy")}</p>
       {props.loggedIn && !props.hidden ? <History refreshKey={props.historyKey} onOpenCase={props.onOpenCase} /> : null}
+      {props.loggedIn && !props.hidden ? <RadarSearch /> : null}
     </section>
   );
 }

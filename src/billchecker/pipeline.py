@@ -23,6 +23,7 @@ from .ingest import IngestError, ingest_many
 from .llm import JsonLLM, LLMUnavailable
 from .models import Bill, Eob
 from .reference import Reference, price_context
+from .radar import normalize_provider, radar_items
 from .research import research_record
 from .rules import run_rules
 from .store import CaseRow, Store, unpack_files
@@ -138,7 +139,16 @@ class CaseRunner:
         )
         self.store.put_result(case_id, result)
         self._collect_research(case, bill, eob, flags, result)
+        self._collect_radar(case, bill, flags)
         self._set(case, "ready")
+
+    def _collect_radar(self, case: CaseRow, bill: Bill, flags) -> None:
+        user = self.store.get_user(case.user_id)
+        provider_key = normalize_provider(bill.provider_name)
+        if user is None or not user.radar_consent or provider_key is None:
+            self.store.delete_radar_case(case.case_id)
+            return
+        self.store.put_radar_reports(case.case_id, case.user_id, provider_key, bill.provider_name, radar_items(bill, flags))
 
     def _collect_research(self, case: CaseRow, bill: Bill, eob: Optional[Eob], flags, result: Dict[str, Any]) -> None:
         user = self.store.get_user(case.user_id)

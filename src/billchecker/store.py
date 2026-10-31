@@ -142,6 +142,10 @@ MIGRATIONS = [
     CREATE INDEX radar_provider ON radar_reports(provider_key);
     CREATE INDEX radar_user ON radar_reports(user_key);
     """,
+    # 3: a report the user marked "No, it was fine" no longer counts toward patterns.
+    """
+    ALTER TABLE radar_reports ADD COLUMN disputed BOOLEAN NOT NULL DEFAULT FALSE;
+    """,
 ]
 
 
@@ -502,25 +506,29 @@ class Store:
         case_key, user_key = self.pseudonym("case", case_id), self.pseudonym("user", user_id)
         now = self._now()
         with self.pool.connection() as conn, conn.transaction():
-            confirmed = {
-                r[0]
+            # Keep the user's earlier verdicts when a case is re-checked (edit, language switch).
+            verdicts = {
+                r[0]: (r[1], r[2])
                 for r in conn.execute(
-                    "SELECT report_key FROM radar_reports WHERE case_key = %s AND confirmed", (case_key,)
+                    "SELECT report_key, confirmed, disputed FROM radar_reports WHERE case_key = %s", (case_key,)
                 )
             }
             conn.execute("DELETE FROM radar_reports WHERE case_key = %s", (case_key,))
             for item in items:
                 key = self.pseudonym("radar", case_id, item["flag_id"])
+                confirmed, disputed = verdicts.get(key, (False, False))
                 conn.execute(
-                    "INSERT INTO radar_reports VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    "INSERT INTO radar_reports (report_key, provider_key, provider_name, rule, code, user_key, case_key, "
+                    "confirmed, month, updated_at, disputed) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                     (key, provider_key, provider_name, item["rule"], item.get("code"), user_key, case_key,
-                     key in confirmed, now.strftime("%Y-%m"), now),
+                     confirmed, now.strftime("%Y-%m"), now, disputed),
                 )
 
-    def confirm_radar_report(self, case_id: str, flag_id: str, confirmed: bool) -> None:
+    def set_radar_verdict(self, case_id: str, flag_id: str, verdict: str) -> None:
+        """verdict from the flag feedback: correct confirms, incorrect excludes, unsure is neutral."""
         self._q(
-            "UPDATE radar_reports SET confirmed = %s, updated_at = %s WHERE report_key = %s",
-            (confirmed, self._now(), self.pseudonym("radar", case_id, flag_id)),
+            "UPDATE radar_reports SET confirmed = %s, disputed = %s, updated_at = %s WHERE report_key = %s",
+            (verdict == "correct", verdict == "incorrect", self._now(), self.pseudonym("radar", case_id, flag_id)),
         )
 
     def delete_radar_case(self, case_id: str) -> None:
@@ -531,7 +539,7 @@ class Store:
         return self._q(
             "SELECT rule, code, count(DISTINCT user_key) AS users, "
             "count(DISTINCT user_key) FILTER (WHERE confirmed) AS confirmed_users, max(month) AS last_month "
-            "FROM radar_reports WHERE provider_key = %s GROUP BY rule, code HAVING count(DISTINCT user_key) >= %s "
+            "FROM radar_reports WHERE provider_key = %s AND NOT disputed GROUP BY rule, code HAVING count(DISTINCT user_key) >= %s "
             "ORDER BY users DESC, rule, code",
             (provider_key, k),
         )
@@ -541,10 +549,11 @@ class Store:
         return self._q(
             "SELECT provider_key, mode() WITHIN GROUP (ORDER BY provider_name) AS provider_name, count(*) AS patterns "
             "FROM (SELECT provider_key, provider_name, rule, coalesce(code, '') AS code FROM radar_reports "
-            "      GROUP BY provider_key, provider_name, rule, coalesce(code, '')) AS named "
+            "      WHERE NOT disputed GROUP BY provider_key, provider_name, rule, coalesce(code, '')) AS named "
             # coalesce: rules without a code (e.g. balance mismatch) must still match.
             "WHERE provider_key LIKE %s AND (provider_key, rule, code) IN ("
-            "  SELECT provider_key, rule, coalesce(code, '') FROM radar_reports GROUP BY provider_key, rule, coalesce(code, '') "
+            "  SELECT provider_key, rule, coalesce(code, '') FROM radar_reports WHERE NOT disputed "
+            "  GROUP BY provider_key, rule, coalesce(code, '') "
             "  HAVING count(DISTINCT user_key) >= %s) "
             "GROUP BY provider_key ORDER BY patterns DESC, provider_key LIMIT %s",
             ("%" + query + "%", k, limit),
