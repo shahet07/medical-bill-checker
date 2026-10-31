@@ -231,68 +231,127 @@ function Screen({ s, step }: { s: SiteText; step: number }) {
   );
 }
 
+// Scroll-driven when the pinned scene fits the window (see the matching media query in site.css).
+const SCROLL_MODE = "(min-width: 900px) and (min-height: 620px) and (prefers-reduced-motion: no-preference)";
+
 export default function Journey({ s }: { s: SiteText }) {
+  const stops = s.journey.stops;
+  const n = stops.length;
   const [step, setStep] = useState(0);
+  const [scrollMode, setScrollMode] = useState(false);
   const [auto, setAuto] = useState(true);
   const [visible, setVisible] = useState(false);
-  const [hovered, setHovered] = useState(false);
-  const root = useRef<HTMLDivElement>(null);
+  const outer = useRef<HTMLDivElement>(null);
+  const line = useRef<HTMLOListElement>(null);
 
   useEffect(() => {
-    const el = root.current;
+    const mq = window.matchMedia(SCROLL_MODE);
+    const update = () => setScrollMode(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  /** How far through the pinned stretch the reader has scrolled, 0..1. */
+  const progress = () => {
+    const el = outer.current;
+    if (!el) return 0;
+    const pin = el.firstElementChild as HTMLElement;
+    const total = el.offsetHeight - pin.offsetHeight;
+    return total > 0 ? Math.min(1, Math.max(0, -el.getBoundingClientRect().top / total)) : 0;
+  };
+  const setBar = (fraction: number) => line.current?.style.setProperty("--p", String(Math.min(1, Math.max(0, fraction))));
+
+  // Scroll mode: the scroll position picks the step and fills the timeline bar.
+  useEffect(() => {
+    if (!scrollMode) return;
+    let frame = 0;
+    const onScroll = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const pr = progress();
+        setStep(Math.min(n - 1, Math.floor(pr * n)));
+        setBar((pr * n - 0.5) / (n - 1));
+      });
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [scrollMode, n]);
+
+  // Otherwise (small screens, reduced motion): play on a timer while visible.
+  useEffect(() => {
+    if (scrollMode) return;
+    const el = outer.current;
     if (!el || !("IntersectionObserver" in window)) return;
     const io = new IntersectionObserver(([e]) => setVisible(e.isIntersecting), { threshold: 0.35 });
     io.observe(el);
     return () => io.disconnect();
-  }, []);
-
+  }, [scrollMode]);
   useEffect(() => {
-    if (!auto || !visible || hovered || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const t = window.setTimeout(() => setStep((n) => (n + 1) % s.journey.stops.length), STEP_MS);
+    if (scrollMode) return;
+    setBar(step / (n - 1));
+    if (!auto || !visible || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const t = window.setTimeout(() => setStep((x) => (x + 1) % n), STEP_MS);
     return () => window.clearTimeout(t);
-  }, [step, auto, visible, hovered, s.journey.stops.length]);
+  }, [scrollMode, step, auto, visible, n]);
 
-  const stops = s.journey.stops;
+  const choose = (i: number) => {
+    const el = outer.current;
+    if (scrollMode && el) {
+      // Scroll to the middle of that step's stretch; the scroll handler does the rest.
+      const pin = el.firstElementChild as HTMLElement;
+      const total = el.offsetHeight - pin.offsetHeight;
+      const top = el.getBoundingClientRect().top + window.scrollY + ((i + 0.5) / n) * total;
+      window.scrollTo({ top, behavior: "smooth" });
+    } else {
+      setStep(i);
+      setAuto(false);
+    }
+  };
+
   const st = stops[step];
   return (
-    // Autoplay pauses while the pointer is over the section, so nothing changes under it.
-    <div className="journey" ref={root} onPointerEnter={(e) => e.pointerType === "mouse" && setHovered(true)} onPointerLeave={() => setHovered(false)}>
-      <div className="journey-head">
-        <p className="kicker">
-          {s.journey.label} · {s.journey.example}
-        </p>
-        <p className="journey-time display" key={"t" + step}>
-          {st.time}
-        </p>
-        <h3 key={"h" + step} className="fade-swap">
-          {st.title}
-        </h3>
-        <p className="journey-place fade-swap" key={"p" + step}>
-          {st.place}
-        </p>
+    <div className="journey-scroll" ref={outer}>
+      <div className="journey-pin">
+        <div className="site-wrap">
+          <div className="journey">
+            <div className="journey-head">
+              <p className="kicker">
+                {s.journey.label} · {s.journey.example}
+              </p>
+              <p className="journey-time display" key={"t" + step}>
+                {st.time}
+              </p>
+              <h3 key={"h" + step} className="fade-swap">
+                {st.title}
+              </h3>
+              <p className="journey-place fade-swap" key={"p" + step}>
+                {st.place}
+              </p>
+            </div>
+            <div className="journey-stage">
+              <Scene step={step} />
+              <Screen s={s} step={step} />
+            </div>
+            <ol className="journey-line" ref={line} aria-label={s.journey.title}>
+              {stops.map((x, i) => (
+                <li key={x.short} className={(i < step ? "past" : "") + (i === step ? " now" : "")}>
+                  <button type="button" onClick={() => choose(i)} aria-current={i === step ? "step" : undefined} aria-label={x.time + ": " + x.title}>
+                    <span className="dot" aria-hidden="true" />
+                    <span className="lbl">{x.short}</span>
+                  </button>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </div>
       </div>
-      <div className="journey-stage">
-        <Scene step={step} />
-        <Screen s={s} step={step} />
-      </div>
-      <ol className="journey-line" aria-label={s.journey.title}>
-        {stops.map((x, i) => (
-          <li key={x.short} className={(i < step ? "past" : "") + (i === step ? " now" : "")}>
-            <button
-              type="button"
-              onClick={() => {
-                setStep(i);
-                setAuto(false);
-              }}
-              aria-current={i === step ? "step" : undefined}
-              aria-label={x.time + ": " + x.title}
-            >
-              <span className="dot" aria-hidden="true" />
-              <span className="lbl">{x.short}</span>
-            </button>
-          </li>
-        ))}
-      </ol>
     </div>
   );
 }

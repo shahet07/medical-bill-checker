@@ -302,7 +302,19 @@
 .card-b .tiny { font-size: 0.78rem; color: var(--ink-soft); margin: 10px 0 0; }
 
 /* ---------- How it works: a bill's journey (isometric) ---------- */
-.journey-section { background: linear-gradient(180deg, var(--tint) 0%, var(--paper) 100%); overflow: hidden; }
+.journey-section { background: linear-gradient(180deg, var(--tint) 0%, var(--paper) 100%); overflow: clip; }
+.journey-pin { padding: 112px 0; }
+/* Scroll-driven: the section is tall, the scene stays pinned while scrolling moves the story.
+   Must match SCROLL_MODE in Journey.tsx. overflow: clip (not hidden) keeps sticky working. */
+@media (min-width: 900px) and (min-height: 620px) and (prefers-reduced-motion: no-preference) {
+  .journey-scroll { height: calc(100vh + 6 * 55vh); }
+  .journey-pin { position: sticky; top: 0; height: 100vh; padding: 96px 0 20px; display: flex; flex-direction: column; justify-content: center; }
+  .journey-stage { margin-top: 0; }
+  .journey-pin .iso-scene { height: calc(100vh - 250px); width: 100%; }
+  .journey-pin > .site-wrap { width: 100%; }
+  .journey-pin .phone { top: 50%; transform: translateY(-50%); }
+  .journey-pin .phone-body { height: min(360px, calc(100vh - 340px)); }
+}
 :root {
   --iso-t: #ffffff; --iso-l: #e6ebfb; --iso-r: #d2dbf6;
   --slab-t: #eef2ff; --slab-l: #dbe3fb; --slab-r: #c9d3f3;
@@ -413,8 +425,8 @@
 .journey-line { list-style: none; margin: 18px 0 0; padding: 0; display: flex; position: relative; max-width: 780px; }
 .journey-line::before { content: ""; position: absolute; left: 12px; right: 12px; top: 11px; height: 2px; background: color-mix(in srgb, var(--blue) 22%, transparent); }
 .journey-line li { flex: 1; position: relative; }
-.journey-line li.past::after, .journey-line li.now::after { content: ""; position: absolute; left: 12px; right: 0; top: 11px; height: 2px; background: var(--blue); }
-.journey-line li.now::after { right: auto; width: 0; }
+.journey-line { --p: 0; }
+.journey-line::after { content: ""; position: absolute; left: 12px; top: 11px; height: 2px; background: var(--blue); width: calc(100% * 5 / 6 * var(--p)); transition: width 0.15s linear; }
 .journey-line button { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; background: none; border: 0; padding: 0; cursor: pointer; font: inherit; color: var(--ink-soft); font-size: 0.86rem; white-space: nowrap; }
 .journey-line .dot { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--blue); background: var(--paper); transition: background 0.3s, transform 0.3s var(--ease-out), box-shadow 0.3s; }
 .journey-line li.past .dot { background: var(--blue); transform: scale(0.75); }

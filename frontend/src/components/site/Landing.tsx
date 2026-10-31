@@ -72,14 +72,10 @@ export default function Landing() {
           </div>
         </section>
 
-        {/* How it works: one bill's journey through an isometric town */}
-        <section id="how" className="section journey-section">
-          <div className="site-wrap">
-            <h2 className="sr-only">{s.journey.title}</h2>
-            <div className="reveal">
-              <Journey s={s} />
-            </div>
-          </div>
+        {/* How it works: one bill's journey through an isometric town (scroll-driven on large screens) */}
+        <section id="how" className="journey-section">
+          <h2 className="sr-only">{s.journey.title}</h2>
+          <Journey s={s} />
         </section>
 
         {/* What it checks: numbered list */}
