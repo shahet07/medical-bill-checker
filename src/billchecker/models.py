@@ -136,6 +136,7 @@ RuleName = Literal[
     "charge_mismatch",
     "payment_not_applied",
     "unbundled_pair",
+    "credit_balance",
 ]
 
 

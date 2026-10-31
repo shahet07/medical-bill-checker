@@ -183,6 +183,7 @@ def suggested_opener(bill: Bill, flags: Sequence[Flag], language: str) -> str:
         "charge_mismatch": ("a charge that's different from what my insurer was billed", "un cargo diferente de lo que se le facturó a mi seguro"),
         "payment_not_applied": ("whether my insurance payment has been applied", "si ya se aplicó el pago de mi seguro"),
         "unbundled_pair": ("two services that are usually billed together", "dos servicios que suelen facturarse juntos"),
+        "credit_balance": ("the credit balance on my account and getting it refunded", "el saldo a mi favor y cómo recibir el reembolso"),
     }
     i = 1 if language == "es" else 0
     asks = list(dict.fromkeys(topics[f.rule][i] for f in flags if f.rule in topics))[:2]

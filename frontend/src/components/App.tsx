@@ -8,9 +8,10 @@ import type { CaseData, User } from "@/lib/types";
 import { AccountView, AuthView } from "./AuthViews";
 import { ConfirmView, FailedView, StatusView, UploadView } from "./CaseViews";
 import Header from "./Header";
+import Refunds from "./Refunds";
 import Results from "./Results";
 
-export type View = "auth" | "account" | "upload" | "status" | "confirm" | "failed" | "results";
+export type View = "auth" | "account" | "upload" | "status" | "confirm" | "failed" | "results" | "refunds";
 
 const POLL_MS = 3000;
 const CASE_KEY = "billchecker.case";
@@ -216,6 +217,11 @@ export default function App() {
           show("account");
         }}
         onLogout={logout}
+        onRefunds={() => {
+          stopPolling();
+          setError("");
+          show("refunds");
+        }}
         onToggleLang={() => setLang(lang === "es" ? "en" : "es")}
       />
       <main className="wrap">
@@ -240,6 +246,7 @@ export default function App() {
           }}
           onOpenCase={openCase}
         />
+        <Refunds hidden={view !== "refunds"} onBack={() => reset()} />
         <StatusView hidden={view !== "status"} caseData={caseData} onCancel={deleteCase} />
         <ConfirmView hidden={view !== "confirm"} caseData={caseData} caseId={caseId} onSubmitted={afterSubmit} />
         <FailedView hidden={view !== "failed"} caseData={caseData} onRestart={discardAndReset} />

@@ -58,7 +58,7 @@ def usd(amount: Decimal) -> str:
     return "{}${:,.2f}".format("-" if amount < 0 else "", abs(amount))
 
 
-LETTER_KINDS = ("itemized_request", "dispute", "financial_assistance", "payment_plan", "insurer_appeal")
+LETTER_KINDS = ("itemized_request", "dispute", "financial_assistance", "payment_plan", "insurer_appeal", "refund_request")
 DENIED = ("denied", "not_processed")
 
 
@@ -299,6 +299,12 @@ def _flag_paragraph(flag: Flag, bill: Bill, eob: Optional[Eob], lines: Dict, eob
             "National Correct Coding Initiative normally bills as one:\n"
             + "\n".join("   - " + s for s in services)
             + "\n   Please confirm whether they should be billed separately on my account."
+        )
+
+    if flag.rule == "credit_balance":
+        return (
+            "Credit balance. This statement shows a credit balance of {} on my account. Please refund it to me, "
+            "or tell me in writing why it is being held.".format(usd(abs(bill.totals.patient_balance)))
         )
 
     if flag.rule == "no_itemization":

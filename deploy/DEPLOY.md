@@ -28,6 +28,7 @@ Open `https://<your domain>`. The certificate appears within a minute of first s
 | Feedback and survey answers (no content) | `flag_feedback`, `survey` | Kept for analysis |
 | Research dataset (only with consent; codes, amounts, flags; no names, providers, dates, IDs) | `research_cases` | Kept; deleted if the user deletes the case or account, or withdraws consent while the case exists |
 | Usage events (counts; pseudonymous user key) | `events` | Kept; unlinked when an account is deleted |
+| Payments the patient entered for the refund finder (encrypted) | `payments` | 90 days |
 | Dispute packets (quoted evidence, document and letter fingerprints, signature; no personal details) | `packets` | With their case (90 days) |
 | Billing error radar reports (only with radar consent; provider name, problem type, code) | `radar_reports` | Until the user withdraws consent or deletes the case/account |
 

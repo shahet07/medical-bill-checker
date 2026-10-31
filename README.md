@@ -50,10 +50,11 @@ The page is plain HTML/CSS/JS with no third-party scripts. A strict Content-Secu
 
 ## Practice the call, prove the evidence, see the patterns
 
-Three features we haven't seen in other consumer billing tools:
+Features we haven't seen in other consumer billing tools:
 
 - **Call rehearsal coach.** Patients practice the phone call before making it. An LLM plays the billing-office or insurer representative using only the account data, and pushes back realistically. A coach then scores clarity, evidence, asks and persistence, and suggests phrases grounded in the billing-rights guides. Transcripts are never stored. The representative can't invent amounts or ask for an SSN, card or bank details, and the coach can't give advice. (`src/billchecker/rehearsal.py`)
 - **Tamper-evident dispute packets.** Every dispute letter carries a link and QR code to a public verification page. The page shows an Ed25519-signed record of the quoted evidence, SHA-256 fingerprints of the uploaded documents, and a fingerprint of the letter. The recipient checks the signature in their browser, and can fingerprint their own copy of a statement or the letter locally, with no upload. It contains no personal details and disappears with the case. (`src/billchecker/packet.py`, `frontend/src/components/VerifyPacket.tsx`)
+- **Refund finder.** Follows each visit across the patient's saved statements and EOBs, plus the payments they enter (encrypted, kept 90 days). It finds money the provider may owe back: a credit balance on the latest statement, paying more than the EOB says is owed, or a payment made twice. It then writes a refund-request letter. A new check also flags any statement with a credit balance. (`src/billchecker/refunds.py`)
 - **Billing error radar.** With a separate opt-in, patients share anonymous reports: provider name, type of problem and procedure code. They never share amounts, dates or personal details. A pattern appears only after **at least 10 different people** report it (k-anonymity, set with `BILLCHECKER_RADAR_K`; keep it at 10 or more in production), counts are shown as ranges, and reports a patient marks "No, it was fine" don't count. Results pages show patterns at the bill's provider, and patients can search providers. Reports are deleted if the patient withdraws consent or deletes the case or account. Because this stores provider names, **get legal review before launch.** (`src/billchecker/radar.py`)
 
 ## Ask a question (RAG)

@@ -146,6 +146,17 @@ MIGRATIONS = [
     """
     ALTER TABLE radar_reports ADD COLUMN disputed BOOLEAN NOT NULL DEFAULT FALSE;
     """,
+    # 4: payments the patient made, for the refund finder.
+    """
+    CREATE TABLE payments (
+        payment_id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+        data BYTEA NOT NULL,             -- encrypted JSON: provider, amount, date, note
+        created_at TIMESTAMPTZ NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL
+    );
+    CREATE INDEX payments_user ON payments(user_id);
+    """,
 ]
 
 
@@ -484,6 +495,30 @@ class Store:
         self._q("DELETE FROM cases WHERE case_id = %s", (case_id,))  # packets go with it
         return True
 
+    # --- payments (refund finder) ----------------------------------------------------------
+
+    def add_payment(self, user_id: str, payment: Dict[str, Any]) -> str:
+        payment_id = new_id()
+        now = self._now()
+        self._q(
+            "INSERT INTO payments VALUES (%s, %s, %s, %s, %s)",
+            (payment_id, user_id, self._seal(payment_id, json.dumps(payment).encode()), now, now + self.case_ttl),
+        )
+        return payment_id
+
+    def list_payments(self, user_id: str) -> List[Dict[str, Any]]:
+        rows = self._q(
+            "SELECT payment_id, data FROM payments WHERE user_id = %s AND expires_at > %s ORDER BY created_at",
+            (user_id, self._now()),
+        )
+        return [dict(json.loads(self._open(r["payment_id"], r["data"])), payment_id=r["payment_id"]) for r in rows]
+
+    def delete_payment(self, user_id: str, payment_id: str) -> bool:
+        if not is_id(payment_id):
+            return False
+        with self.pool.connection() as conn:
+            return conn.execute("DELETE FROM payments WHERE payment_id = %s AND user_id = %s", (payment_id, user_id)).rowcount > 0
+
     # --- dispute packets --------------------------------------------------------------------
 
     def put_packet(self, packet_id: str, case_id: str, payload: Dict[str, Any], signature: str) -> None:
@@ -619,4 +654,5 @@ class Store:
             counts["uploads_deleted"] = conn.execute("DELETE FROM uploads WHERE expires_at <= %s", (now,)).rowcount
             counts["cases_deleted"] = conn.execute("DELETE FROM cases WHERE expires_at <= %s", (now,)).rowcount
             counts["sessions_deleted"] = conn.execute("DELETE FROM sessions WHERE expires_at <= %s", (now,)).rowcount
+            counts["payments_deleted"] = conn.execute("DELETE FROM payments WHERE expires_at <= %s", (now,)).rowcount
         return counts

@@ -131,6 +131,7 @@ const STRINGS = {
     rule_charge_mismatch: "Charge differs from what your insurer was billed",
     rule_payment_not_applied: "Insurance payment may not be applied",
     rule_unbundled_pair: "Services usually billed together",
+    rule_credit_balance: "The provider may owe you a refund",
     reference_price: "{label}: about {price}",
     conf_high: "Strong signal",
     conf_medium: "Worth a look",
@@ -226,6 +227,7 @@ const STRINGS = {
     rule_charge_mismatch: "El cargo es diferente de lo que se le facturó a su seguro",
     rule_payment_not_applied: "Puede que no se haya aplicado el pago del seguro",
     rule_unbundled_pair: "Servicios que suelen facturarse juntos",
+    rule_credit_balance: "El proveedor podría deberle un reembolso",
     reference_price: "{label}: aproximadamente {price}",
     conf_high: "Señal fuerte",
     conf_medium: "Vale la pena revisar",
@@ -336,6 +338,8 @@ const SERVER_ERRORS_ES = {
   email_taken: "Ya existe una cuenta con este email. Pruebe a iniciar sesión.",
   bad_origin: "Solicitud rechazada.",
   invalid_question: "Haga una pregunta más corta.",
+  future_date: "La fecha del pago no puede estar en el futuro.",
+  no_refund: "No encontramos un reembolso que pedir en esta visita.",
   invalid_rehearsal: "La práctica no pudo continuar. Empiece de nuevo.",
 };
 

@@ -715,3 +715,37 @@ def test_only_dispute_letters_get_packets(client, llm):
     case_id = start_case(client, llm, "summary")
     r = client.post("/api/cases/{}/letter".format(case_id), json={"kind": "itemized_request", "patient": PATIENT}).json()
     assert r["verify_url"] is None and db_count(client, "packets") == 0
+
+
+# --- Refund finder --------------------------------------------------------------------------------
+
+
+def test_refund_finder_flow(client, llm):
+    case_id = start_case(client, llm, "clean")
+    r = client.post("/api/payments", json={"case_id": case_id, "amount": "205.00", "paid_on": "2026-03-04", "note": "paid at check-in"})
+    assert r.status_code == 201
+    out = client.get("/api/refunds").json()
+    [ep] = out["episodes"]
+    assert ep["owed"] == "40.00" and ep["paid"] == "205.00" and ep["estimate"] == "165.00"
+    assert ep["findings"] == [{"kind": "overpaid", "amount": "165.00"}]
+    assert out["total_estimate"] == "165.00"
+    letter = client.post("/api/refunds/letter", json={"episode_id": ep["episode_id"], "patient": PATIENT}).json()
+    assert "I paid $165.00 more than I owe" in letter["text"]
+    pdf = client.post("/api/refunds/letter", json={"episode_id": ep["episode_id"], "patient": PATIENT, "format": "pdf"})
+    assert pdf.headers["content-type"] == "application/pdf"
+    # Payment details are stored encrypted.
+    assert "check-in" not in db_dump(client, "payments")
+    client.delete("/api/payments/" + ep["payments"][0]["payment_id"])
+    assert client.get("/api/refunds").json()["episodes"][0]["findings"] == []
+
+
+def test_payment_validation_and_isolation(client, llm):
+    case_id = start_case(client, llm, "clean")
+    assert client.post("/api/payments", json={"case_id": case_id, "amount": "-5.00", "paid_on": "2026-03-04"}).status_code == 422
+    assert client.post("/api/payments", json={"case_id": case_id, "amount": "5.00", "paid_on": "2099-01-01"}).status_code == 422
+    other = other_user(client)
+    assert other.post("/api/payments", json={"case_id": case_id, "amount": "5.00", "paid_on": "2026-03-04"}).status_code == 404
+    pid = client.post("/api/payments", json={"case_id": case_id, "amount": "5.00", "paid_on": "2026-03-04"}).json()["payment_id"]
+    assert other.delete("/api/payments/" + pid).status_code == 404
+    assert other.get("/api/refunds").json()["episodes"] == []
+    assert client.post("/api/refunds/letter", json={"episode_id": "nope", "patient": PATIENT}).status_code == 404

@@ -8,6 +8,7 @@ export default function Header(props: {
   showUserMenu: boolean;
   onAccount: () => void;
   onLogout: () => void;
+  onRefunds: () => void;
   onToggleLang: () => void;
 }) {
   const { lang, t, ts } = useApp();
@@ -21,6 +22,9 @@ export default function Header(props: {
               <span id="user-email" className="muted">
                 {props.user?.email}
               </span>
+              <button id="refunds-button" type="button" className="small" onClick={props.onRefunds}>
+                {t("refunds_button")}
+              </button>
               <button id="account-button" type="button" className="small" onClick={props.onAccount}>
                 {ts("my_account")}
               </button>

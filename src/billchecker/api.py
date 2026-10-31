@@ -50,6 +50,7 @@ from .models import Bill, Eob, Flag, Money
 from .pipeline import CaseRunner
 from .rag import MAX_QUESTION_CHARS, GeminiEmbedder, KnowledgeBase, answer_question
 from .radar import DEFAULT_K, normalize_provider, present
+from .refunds import Payment, Statement, episode_out, find_refunds, refund_letter
 from .packet import build_payload, new_packet_id, public_key_b64, sha256_hex, sign, signing_key
 from .packet import verify as verify_packet
 from .rehearsal import MAX_TURNS, Turn, opening, rep_reply, score_call, suggested_opener
@@ -97,6 +98,7 @@ DEFAULT_LIMITS = {
     "ask": (30, 3600),
     "rehearse": (150, 3600),
     "verify": (120, 3600),
+    "payments": (60, 3600),
 }
 
 
@@ -265,6 +267,20 @@ class Rehearsal(_Body):
     counterpart: Literal["billing_office", "insurer"] = "billing_office"
     turns: List[Turn] = Field(default_factory=list, max_length=MAX_TURNS)
     language: Literal["en", "es"] = "en"
+
+
+class PaymentIn(_Body):
+    case_id: str  # the bill (visit) this payment was for
+    amount: Money = Field(gt=0)
+    paid_on: date
+    note: str = Field(default="", max_length=100)
+
+
+class RefundLetter(_Body):
+    episode_id: str = Field(max_length=32)
+    patient: PatientIn
+    note: Optional[str] = Field(default=None, max_length=MAX_NOTE_CHARS)
+    format: Literal["json", "pdf"] = "json"
 
 
 class LanguageChange(_Body):
@@ -794,6 +810,77 @@ def create_app(settings: Settings) -> FastAPI:
             "fallback": out.fallback,
             "tips": out.tips,
         }
+
+    # --- Refund finder ---------------------------------------------------------------------
+
+    def user_episodes(user: UserRow):
+        statements = []
+        for case in store.list_cases(user.user_id):
+            if case.status != "ready":
+                continue
+            result = store.get_result(case.case_id) or {}
+            if not result.get("bill"):
+                continue
+            eob = Eob.model_validate(result["eob"]) if result.get("eob") else None
+            statements.append(Statement(case.case_id, case.created_at, Bill.model_validate(result["bill"]), eob))
+        payments = [
+            Payment(p["payment_id"], p["case_id"], Decimal(p["amount"]), date.fromisoformat(p["paid_on"]), p.get("note", ""))
+            for p in store.list_payments(user.user_id)
+        ]
+        episodes = find_refunds(statements, payments)
+        assigned = {p.payment_id for e in episodes for p in e.payments}
+        return episodes, [p for p in payments if p.payment_id not in assigned]
+
+    @app.get("/api/refunds")
+    def refunds(user: UserRow = Depends(current_user)):
+        episodes, orphans = user_episodes(user)
+        found = [e for e in episodes if e.findings]
+        if found:
+            store.record_event("refunds_found", user.user_id, visits=len(found))
+        return {
+            "episodes": [episode_out(e) for e in episodes],
+            "total_estimate": str(sum((e.estimate for e in episodes), Decimal("0"))),
+            "unassigned_payments": [
+                {"payment_id": p.payment_id, "amount": str(p.amount), "paid_on": p.paid_on.isoformat(), "note": p.note}
+                for p in orphans
+            ],
+        }
+
+    @app.post("/api/payments", status_code=201)
+    def add_payment(body: PaymentIn, user: UserRow = Depends(current_user)):
+        limiter.check(user.user_id, "payments")
+        own_case(body.case_id, user.user_id)
+        if body.paid_on > settings.today():
+            raise _error(422, "future_date", "The payment date can't be in the future.")
+        payment_id = store.add_payment(
+            user.user_id,
+            {"case_id": body.case_id, "amount": str(body.amount), "paid_on": body.paid_on.isoformat(), "note": body.note.strip()},
+        )
+        store.record_event("payment_added", user.user_id)
+        return {"payment_id": payment_id}
+
+    @app.delete("/api/payments/{payment_id}", status_code=204)
+    def delete_payment(payment_id: str, user: UserRow = Depends(current_user)):
+        if not store.delete_payment(user.user_id, payment_id):
+            raise _error(404, "not_found", "Payment not found.")
+        return Response(status_code=204)
+
+    @app.post("/api/refunds/letter")
+    def refund_request(body: RefundLetter, user: UserRow = Depends(current_user)):
+        limiter.check(user.user_id, "letter")
+        episodes, _ = user_episodes(user)
+        ep = next((e for e in episodes if e.episode_id == body.episode_id), None)
+        if ep is None:
+            raise _error(404, "not_found", "That visit was not found. It may have expired.")
+        try:
+            out = refund_letter(ep, Patient(**body.patient.model_dump()), settings.today(), body.note)
+        except ValueError:
+            raise _error(422, "no_refund", "We didn't find a refund to ask for on this visit.")
+        store.record_event("letter_created", user.user_id, kind=out.kind, format=body.format)
+        if body.format == "pdf":
+            return Response(render_pdf(out), media_type="application/pdf",
+                            headers={"Content-Disposition": 'attachment; filename="refund-request.pdf"'})
+        return {"kind": out.kind, "subject": out.subject, "text": out.text}
 
     # --- Billing error radar ---------------------------------------------------------------
 

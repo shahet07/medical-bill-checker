@@ -329,3 +329,19 @@ def test_incomplete_eobs_skip_whole_claim_rules():
     assert run_rules(bill, make_eob(), eob_complete=False) == []
     denied = make_eob([eob_line("E1", status="denied")])
     assert [f.rule for f in run_rules(bill, denied, eob_complete=False)] == ["billed_after_denial"]
+
+
+# --- credit_balance --------------------------------------------------------------------
+
+from billchecker.rules import credit_balance  # noqa: E402
+
+
+def test_credit_balance_flags_negative_amount_due():
+    [flag] = credit_balance(make_bill(totals=dict(totals("-45.00"), adjustments="-195.00")), None)
+    assert flag.severity == "review" and flag.confidence == "high"
+    assert "$45.00" in flag.summary and "refund" in flag.summary
+
+
+def test_credit_balance_ignores_zero_positive_and_unknown():
+    for balance in ("0.00", "-0.01", "20.00", None):
+        assert credit_balance(make_bill(totals=totals(balance)), None) == []

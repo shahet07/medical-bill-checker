@@ -265,3 +265,20 @@ td.date { white-space: nowrap; color: var(--muted); }
 .inline-form { display: flex; gap: 8px; }
 .inline-form input { flex: 1; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Refund finder */
+.refund-total { font-weight: 600; margin: 14px 0 6px; }
+.refund-total.found { color: var(--ok); font-size: 1.1rem; }
+.card.episode.found { border-left: 5px solid var(--ok); }
+.episode h3 { margin: 0 0 4px; }
+.episode h4 { margin: 18px 0 6px; font-size: 0.95rem; }
+.refund-findings { background: var(--accent-soft); border-radius: 8px; padding: 10px 14px; margin-top: 14px; }
+.refund-estimate { font-weight: 700; color: var(--ok); margin: 0 0 4px; }
+.refund-findings ul { margin: 0; padding-left: 18px; }
+.payments { margin: 0 0 10px; padding-left: 18px; }
+.payment-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.payment-form label, .refund-letter label { display: flex; flex-direction: column; font-weight: 400; font-size: 0.85rem; color: var(--muted); }
+.payment-form label.grow { flex: 1; min-width: 160px; }
+.payment-form input, .refund-letter input { padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
+.refund-letter { border-top: 1px solid var(--border); margin-top: 18px; padding-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+#refunds-back { margin-bottom: 24px; }

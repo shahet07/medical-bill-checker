@@ -128,6 +128,13 @@ CASES = [
         CLEAN_EOB,
         ["charge_mismatch"],
     ),
+    # The patient paid at the visit, and after insurance the account is in credit.
+    Case(
+        "credit",
+        BillSpec([OFFICE, CBC, DRAW], adjustments="-250.00", balance="-45.00"),
+        CLEAN_EOB,
+        ["balance_mismatch", "credit_balance"],
+    ),
     # The insurer paid, but the bill shows no payment yet.
     Case(
         "unpaid",

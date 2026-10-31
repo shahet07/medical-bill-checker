@@ -41,6 +41,7 @@ const TITLES: Record<string, string> = {
   charge_mismatch: "Charge differs from the amount billed to the insurer",
   payment_not_applied: "Insurance payment may not be applied",
   unbundled_pair: "Services usually billed together",
+  credit_balance: "Credit balance on the patient's account",
 };
 
 // Same bytes Python signs: json.dumps(sort_keys=True, separators=(",", ":"), ensure_ascii=False).

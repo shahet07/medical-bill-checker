@@ -325,6 +325,27 @@ def payment_not_applied(bill: Bill, eob: Optional[Eob]) -> List[Flag]:
     return [_make_flag("payment_not_applied", "review", "medium", summary, evidence)]
 
 
+def credit_balance(bill: Bill, eob: Optional[Eob]) -> List[Flag]:
+    """The statement shows a negative amount due: the provider is holding a credit for the patient."""
+    balance = bill.totals.patient_balance
+    if balance is None or balance >= -BALANCE_TOLERANCE:
+        return []
+    src = bill.totals.source
+    evidence = [
+        Evidence(
+            source="bill",
+            ref="totals",
+            page=src.page if src else None,
+            text=src.text if src else "Amount due: {}".format(_money(balance)),
+        )
+    ]
+    summary = (
+        "Your statement shows a credit balance of {}. That usually means you paid more than you owe "
+        "and the provider may owe you a refund. This needs checking.".format(_money(abs(balance)))
+    )
+    return [_make_flag("credit_balance", "review", "high", summary, evidence)]
+
+
 RULES: List[Rule] = [
     duplicate_line,
     balance_mismatch,
@@ -334,6 +355,7 @@ RULES: List[Rule] = [
     not_on_eob,
     charge_mismatch,
     payment_not_applied,
+    credit_balance,
 ]
 
 
